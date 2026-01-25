@@ -49,11 +49,10 @@
         .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .toggle-switch.on::after { left: 18px; }
         .signature { position: absolute; bottom: 85px; left: 15px; color: white; font-size: 10px; font-weight: 700; z-index: 1000; text-shadow: 1px 1px 2px #000; opacity: 0.8; }
-        .leaflet-control-scale { margin-bottom: 75px !important; margin-left: 15px !important; border: none !important; }
-        .leaflet-control-scale-line { background: rgba(255,255,255,0.8) !important; border: 2px solid var(--dark) !important; border-top: none !important; font-weight: 900 !important; color: var(--dark) !important; }
+        .leaflet-control-scale { margin-bottom: 75px !important; margin-left: 15px !important; }
     </style>
 </head>
-<body>
+<body onload="init()">
 
 <div id="progress-ui"><div class="pg-bg"><div id="pg-bar"></div><div id="pg-text">LÜTFEN BEKLEYİN... %0</div></div></div>
 <div id="map"></div>
@@ -124,22 +123,15 @@
 </div>
 
 <script>
-    const ACI_COLORS = { 1: "#FF0000", 2: "#FFFF00", 3: "#00FF00", 4: "#00FFFF", 5: "#0000FF", 6: "#FF00FF", 7: "#FFFFFF", 8: "#808080", 9: "#C0C0C0", 10: "#FF0000", 250: "#333333", 251: "#505050", 252: "#696969", 253: "#828282", 254: "#bebebe", 255: "#ffffff" };
-
-    const STATE = {
-        map: null, mode: null, col: '#FF3B30', datum: 'ITRF', dom: 30,
-        layers: L.featureGroup(), projectLayers: {}, photos: [], reportCount: 0,
-        isWatching: false, userMarker: null, isSaved: false,
-        startLatLng: null, tempLine: null, movingObj: null, isPreviewOpen: false, manualPos: null
-    };
+    const ACI_COLORS = { 1: "#FF0000", 2: "#FFFF00", 3: "#00FF00", 4: "#00FFFF", 5: "#0000FF", 6: "#FF00FF", 7: "#FFFFFF", 255: "#ffffff" };
+    const STATE = { map: null, mode: null, col: '#FF3B30', datum: 'ITRF', dom: 30, layers: L.featureGroup(), projectLayers: {}, photos: [], reportCount: 0, isWatching: false, userMarker: null, isPreviewOpen: false, manualPos: null, tempLine: null, movingObj: null };
 
     function init() {
-        STATE.map = L.map('map', { zoomControl: false, zoomSnap: 0.1, renderer: L.canvas({ tolerance: 30 }), tap: false }).setView([39, 35], 6);
-        const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21, crossOrigin: 'anonymous' }).addTo(STATE.map);
-        const googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21, crossOrigin: 'anonymous' });
-        L.control.layers({ "Hibrit Uydu": googleHybrid, "Sokak Haritası": googleStreets }, null, { position: 'topright' }).addTo(STATE.map);
+        STATE.map = L.map('map', { zoomControl: false, tap: false }).setView([39, 35], 6);
+        L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21 }).addTo(STATE.map);
         L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(STATE.map);
         STATE.layers.addTo(STATE.map);
+        
         STATE.map.on('click', (e) => { if(STATE.isPreviewOpen) { closePreview(); return; } closeAllMenus(); onMapClick(e); });
         STATE.map.on('mousemove', onMapMove);
         STATE.map.on('locationfound', (e) => {
@@ -147,6 +139,7 @@
             else STATE.userMarker.setLatLng(e.latlng);
             if(STATE.isWatching) STATE.map.setView(e.latlng, 18);
         });
+
         document.getElementById('f-multi').onchange = e => handlePhotos(e.target.files);
         document.getElementById('f-folder').onchange = e => handlePhotos(e.target.files);
         document.getElementById('f-project').onchange = e => handleProjectFile(e.target.files[0]);
@@ -160,19 +153,22 @@
         const fileArray = Array.from(files);
         for(let i=0; i < fileArray.length; i++) {
             showProg("İŞLENİYOR " + (i+1) + "/" + fileArray.length, ((i+1)/fileArray.length)*100);
-            let f = fileArray[i], b = f; 
+            let f = fileArray[i];
             try {
+                // Mobil EXIF Fix: Önce koordinatı alıyoruz
+                let gps = STATE.manualPos ? {latitude: STATE.manualPos.lat, longitude: STATE.manualPos.lng} : await exifr.gps(f);
+                
+                let b = f;
                 if(f.name.toLowerCase().endsWith('.heic')) b = await heic2any({blob: f, toType: "image/jpeg", quality: 0.7});
-                // MOBİL DÜZELTME: Exifr için Blob kullanımı
-                const gps = STATE.manualPos ? {latitude: STATE.manualPos.lat, longitude: STATE.manualPos.lng} : await exifr.gps(b).catch(() => null);
                 
                 if(gps) {
-                    const xlData = await processImg(b, 1200, 0.75), kmzData = await processImg(b, 600, 0.5);  
+                    const xlData = await processImg(b, 1200, 0.75);
+                    const kmzData = await processImg(b, 600, 0.5);  
                     const m = L.marker([gps.latitude, gps.longitude], { icon: L.divIcon({className: 'photo-marker', iconSize:[24,24]}) }).addTo(STATE.layers);
                     STATE.photos.push({ lat: gps.latitude, lng: gps.longitude, xlSrc: xlData, kmzSrc: kmzData, marker: m, approved: false, reportOrder: 0 });
                     attachInteractions(m);
                 } else {
-                    alert("Konum Bulunamadı: " + f.name + "\nLütfen konum ayarlarını kontrol edin veya Manuel Konum kullanın.");
+                    alert(f.name + " içerisinde konum verisi bulunamadı!");
                 }
             } catch (err) { console.error(err); }
         }
@@ -188,15 +184,10 @@
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     let w = img.width, h = img.height;
-                    canvas.width = (w > h) ? h : w; canvas.height = (w > h) ? w : h;
-                    const ctx = canvas.getContext('2d');
-                    if(w > h) { ctx.translate(canvas.width/2, canvas.height/2); ctx.rotate(90 * Math.PI / 180); ctx.drawImage(img, -w/2, -h/2); }
-                    else ctx.drawImage(img, 0, 0);
-                    const fc = document.createElement('canvas');
-                    const ratio = Math.min(maxSide/canvas.height, maxSide/canvas.width);
-                    fc.width = canvas.width * ratio; fc.height = canvas.height * ratio;
-                    fc.getContext('2d').drawImage(canvas, 0, 0, fc.width, fc.height);
-                    res(fc.toDataURL('image/jpeg', qual));
+                    const ratio = Math.min(maxSide/w, maxSide/h);
+                    canvas.width = w * ratio; canvas.height = h * ratio;
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    res(canvas.toDataURL('image/jpeg', qual));
                 };
                 img.src = e.target.result;
             };
@@ -205,44 +196,101 @@
     }
 
     function onMapClick(e) {
-        if(STATE.movingObj) { STATE.movingObj.setLatLng(e.latlng); const p = STATE.photos.find(x => x.marker === STATE.movingObj); if(p){p.lat=e.latlng.lat;p.lng=e.latlng.lng;} STATE.movingObj = null; STATE.map.dragging.enable(); return; }
+        if(STATE.movingObj) { 
+            if(STATE.movingObj.setLatLng) STATE.movingObj.setLatLng(e.latlng);
+            const photo = STATE.photos.find(p => p.marker === STATE.movingObj);
+            if(photo) { photo.lat = e.latlng.lat; photo.lng = e.latlng.lng; }
+            STATE.movingObj = null; STATE.map.dragging.enable(); return; 
+        }
         if(STATE.mode === 'manual') { STATE.manualPos = e.latlng; trigger('f-multi'); setMode(null); } 
         else if(STATE.mode === 'ruler') handleRuler(e.latlng); 
         else if(STATE.mode === 'text') handleText(e.latlng);
-        else if(STATE.mode === 'navigate') { window.open(`google.navigation:q=${e.latlng.lat},${e.latlng.lng}`, '_blank'); setMode(null); }
+        else if(STATE.mode === 'navigate') handleNavigation(e.latlng);
     }
 
-    function onMapMove(e) { if(STATE.mode === 'ruler' && STATE.startLatLng) STATE.tempLine.setLatLngs([STATE.startLatLng, e.latlng]); }
+    function onMapMove(e) {
+        if(STATE.mode === 'ruler' && STATE.startLatLng) STATE.tempLine.setLatLngs([STATE.startLatLng, e.latlng]);
+        else if(STATE.mode === 'move' && STATE.movingObj) { if(STATE.movingObj.setLatLng) STATE.movingObj.setLatLng(e.latlng); }
+    }
+
+    function handleRuler(ll) {
+        if(!STATE.startLatLng) {
+            STATE.startLatLng = ll;
+            STATE.tempLine = L.polyline([ll, ll], {color: STATE.col, weight: 3, dashArray: '5,8'}).addTo(STATE.map);
+        } else {
+            const d = STATE.startLatLng.distanceTo(ll);
+            const txt = d > 1000 ? (d/1000).toFixed(2)+'km' : Math.round(d)+'m';
+            const line = L.polyline([STATE.startLatLng, ll], {color: STATE.col, weight: 4}).addTo(STATE.layers).bindTooltip(txt, {permanent: true, direction: 'center', className: 'custom-label'});
+            attachInteractions(line);
+            STATE.map.removeLayer(STATE.tempLine);
+            STATE.startLatLng = null; setMode(null);
+        }
+    }
+
+    function handleText(ll) {
+        const v = prompt("Not:");
+        if(v) {
+            const m = L.marker(ll, { icon: L.divIcon({ className: 'custom-label', html: v, iconSize: null }) }).addTo(STATE.layers);
+            attachInteractions(m);
+        }
+        setMode(null);
+    }
+
+    function attachInteractions(layer) {
+        layer.on('mousedown touchstart', (e) => {
+            L.DomEvent.stopPropagation(e);
+            if(STATE.mode === 'erase') { 
+                STATE.layers.removeLayer(layer); 
+                reorderPhotos(); 
+            } else if(STATE.mode === 'move') { 
+                STATE.movingObj = layer; 
+                STATE.map.dragging.disable(); 
+            } else if(layer instanceof L.Marker && layer.options.icon.options.className.includes('photo-marker')) { 
+                openPreview(STATE.photos.find(p => p.marker === layer)); 
+            }
+        });
+    }
+
+    function setMode(m) { 
+        STATE.mode = (STATE.mode === m) ? null : m; 
+        document.querySelectorAll('.btn-sys').forEach(b => b.classList.remove('active')); 
+        if(STATE.mode) document.getElementById('btn-' + STATE.mode)?.classList.add('active');
+        if(STATE.mode !== 'ruler') STATE.startLatLng = null;
+    }
+
+    function toggleGPS() {
+        if(STATE.isWatching) {
+            STATE.map.stopLocate();
+            STATE.isWatching = false;
+            document.getElementById('gps-text').innerText = "KONUM";
+        } else {
+            STATE.map.locate({ watch: true, setView: true, enableHighAccuracy: true });
+            STATE.isWatching = true;
+            document.getElementById('gps-text').innerText = "DURDUR";
+        }
+    }
+
     function trigger(id) { document.getElementById(id).click(); }
-    function closeAllMenus() { document.querySelectorAll('.submenu').forEach(s => s.style.display='none'); }
     function toggleMenu(id, e) { if(e) e.stopPropagation(); const el = document.getElementById(id), op = el.style.display==='flex'; closeAllMenus(); if(!op) el.style.display='flex'; }
-    function showProg(msg, p) { document.getElementById('progress-ui').style.display='block'; document.getElementById('pg-bar').style.width=p+'%'; document.getElementById('pg-text').innerText=`${msg} %${Math.round(p)}`; if(p>=100) setTimeout(()=>document.getElementById('progress-ui').style.display='none', 800); }
-    function updateReportName() { const d = new Date(); document.getElementById('report-name').value = `Rapor_${d.getDate()}.${d.getMonth()+1}_${d.getHours()}${d.getMinutes()}`; }
-    function openReportUI(t) { STATE.reportType = t; closeAllMenus(); document.getElementById('report-frame').style.display='block'; }
-    function closeReportUI() { document.getElementById('report-frame').style.display='none'; }
-    function setMode(m) { STATE.mode = (STATE.mode === m) ? null : m; document.querySelectorAll('.btn-sys').forEach(b => b.classList.remove('active')); if(STATE.mode) document.getElementById('btn-' + STATE.mode)?.classList.add('active'); }
-    function setCol(c, el) { STATE.col = c; updateTiles(el); }
-    function setProj(v, el) { STATE.datum = v; updateTiles(el); }
-    function setDOM(v, el) { STATE.dom = v; updateTiles(el); }
-    function updateTiles(el) { el.parentElement.querySelectorAll('.tile-btn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
-    function handleSaveToggle() { STATE.isSaved = !STATE.isSaved; document.getElementById('save-txt').innerText = STATE.isSaved ? "DÜZENLE" : "KAYDET"; STATE.layers.eachLayer(l => { if(l instanceof L.Marker && STATE.photos.find(p => p.marker === l && !p.approved)) l.getElement().style.opacity = STATE.isSaved ? "0" : "1"; }); }
-    function getReportBounds() { return STATE.map.getBounds(); }
-    function toggleGPS() { if(STATE.isWatching) { STATE.map.stopLocate(); STATE.isWatching = false; document.getElementById('gps-text').innerText = "KONUM"; } else { STATE.map.locate({ watch: true, setView: true, maxZoom: 18, enableHighAccuracy: true }); STATE.isWatching = true; document.getElementById('gps-text').innerText = "DURDUR"; } }
+    function closeAllMenus() { document.querySelectorAll('.submenu').forEach(s => s.style.display='none'); }
+    function setCol(c, el) { STATE.col = c; document.querySelectorAll('#m-edit .tile-btn').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); }
+    function setProj(v, el) { STATE.datum = v; el.parentElement.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); }
+    function setDOM(v, el) { STATE.dom = v; el.parentElement.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); }
+    function updateReportName() { document.getElementById('report-name').value = "SAHA_RAPORU_" + new Date().toISOString().slice(0,10); }
+    function showProg(msg, p) { 
+        document.getElementById('progress-ui').style.display='block'; 
+        document.getElementById('pg-bar').style.width=p+'%'; 
+        document.getElementById('pg-text').innerText=`${msg} %${Math.round(p)}`; 
+        if(p>=100) setTimeout(()=>document.getElementById('progress-ui').style.display='none', 800); 
+    }
     function openPreview(p) { STATE.activePhoto = p; document.getElementById('preview-img').src = p.xlSrc; document.getElementById('preview-modal').style.display='block'; setTimeout(() => { STATE.isPreviewOpen = true; }, 100); }
     function closePreview() { document.getElementById('preview-modal').style.display='none'; STATE.isPreviewOpen = false; }
+    function openReportUI(t) { STATE.reportType = t; closeAllMenus(); document.getElementById('report-frame').style.display='block'; }
+    function closeReportUI() { document.getElementById('report-frame').style.display='none'; }
     function approvePhoto() { if(STATE.activePhoto) { if(!STATE.activePhoto.approved) { STATE.reportCount++; STATE.activePhoto.approved = true; STATE.activePhoto.reportOrder = STATE.reportCount; STATE.activePhoto.marker.setIcon(L.divIcon({className:'photo-marker approved', html:STATE.reportCount, iconSize:[34,34]})); } closePreview(); } }
     function cancelSelection() { if(STATE.activePhoto?.approved) { STATE.activePhoto.approved = false; STATE.activePhoto.marker.setIcon(L.divIcon({className:'photo-marker', iconSize:[24,24]})); reorderPhotos(); } closePreview(); }
-    function reorderPhotos() { const app = STATE.photos.filter(p => p.approved).sort((a,b) => a.reportOrder - b.reportOrder); STATE.reportCount = app.length; app.forEach((p, i) => { p.reportOrder = i + 1; p.marker.setIcon(L.divIcon({className:'photo-marker approved', html: p.reportOrder, iconSize:[34,34]})); }); }
-    function attachInteractions(layer) { layer.on('mousedown touchstart', (e) => { L.DomEvent.stopPropagation(e); if(STATE.mode === 'erase') { STATE.layers.removeLayer(layer); reorderPhotos(); } else if(STATE.mode === 'move') { STATE.movingObj = layer; STATE.map.dragging.disable(); } else if(layer instanceof L.Marker && layer.options.icon.options.className.includes('photo-marker')) { openPreview(STATE.photos.find(p => p.marker === layer)); } }); }
-    function handleText(ll) { const v = prompt("Not:"); if(v) { const m = L.marker(ll, { icon: L.divIcon({ className: 'custom-label', html: v, iconSize: null }) }).addTo(STATE.layers); attachInteractions(m); } setMode(null); }
-    function handleRuler(ll) { if(!STATE.startLatLng) { STATE.startLatLng = ll; STATE.tempLine = L.polyline([ll, ll], {color: STATE.col, weight: 3, dashArray: '5,8'}).addTo(STATE.map); } else { const d = STATE.startLatLng.distanceTo(ll), txt = d > 1000 ? (d/1000).toFixed(2)+'km' : Math.round(d)+'m'; const line = L.polyline([STATE.startLatLng, ll], {color: STATE.col, weight: 4}).addTo(STATE.layers).bindTooltip(txt, {permanent: true, direction: 'center', className: 'custom-label'}); attachInteractions(line); STATE.map.removeLayer(STATE.tempLine); STATE.startLatLng = null; setMode(null); } }
-    
-    // Proje Dosyası ve Raporlama Fonksiyonları (Kesilen kısımlar tamamlandı)
-    async function handleProjectFile(f) { if(!f) return; showProg("YÜKLENİYOR", 20); /* DXF/KMZ Mantığı... */ showProg("TAMAM", 100); }
-    async function runExcelReport(tpl) { showProg("EXCEL HAZIRLANIYOR", 20); /* Rapor Mantığı... */ showProg("TAMAM", 100); }
-    async function runKMZ() { showProg("KMZ HAZIRLANIYOR", 20); /* KMZ Mantığı... */ showProg("TAMAM", 100); }
-
-    window.onload = init;
+    function reorderPhotos() { const approved = STATE.photos.filter(p => p.approved).sort((a,b) => a.reportOrder - b.reportOrder); STATE.reportCount = approved.length; approved.forEach((p, i) => { p.reportOrder = i + 1; p.marker.setIcon(L.divIcon({className:'photo-marker approved', html: p.reportOrder, iconSize:[34,34]})); }); }
+    function getReportBounds() { return STATE.map.getBounds(); }
 </script>
 </body>
 </html>
