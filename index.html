@@ -49,10 +49,13 @@
         .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .toggle-switch.on::after { left: 18px; }
         .signature { position: absolute; bottom: 85px; left: 15px; color: white; font-size: 10px; font-weight: 700; z-index: 1000; text-shadow: 1px 1px 2px #000; opacity: 0.8; }
-        .leaflet-control-scale { margin-bottom: 75px !important; margin-left: 15px !important; }
+        .leaflet-control-scale { margin-bottom: 75px !important; margin-left: 15px !important; border: none !important; }
+        .leaflet-control-scale-line { background: rgba(255,255,255,0.8) !important; border: 2px solid var(--dark) !important; border-top: none !important; font-weight: 900 !important; color: var(--dark) !important; }
+        .leaflet-top.leaflet-right { top: 15px; right: 15px; }
+        .leaflet-control-layers { border-radius: 15px !important; border: 1px solid rgba(255,255,255,0.4) !important; box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important; }
     </style>
 </head>
-<body onload="init()">
+<body>
 
 <div id="progress-ui"><div class="pg-bg"><div id="pg-bar"></div><div id="pg-text">LÜTFEN BEKLEYİN... %0</div></div></div>
 <div id="map"></div>
@@ -123,23 +126,41 @@
 </div>
 
 <script>
-    const ACI_COLORS = { 1: "#FF0000", 2: "#FFFF00", 3: "#00FF00", 4: "#00FFFF", 5: "#0000FF", 6: "#FF00FF", 7: "#FFFFFF", 255: "#ffffff" };
-    const STATE = { map: null, mode: null, col: '#FF3B30', datum: 'ITRF', dom: 30, layers: L.featureGroup(), projectLayers: {}, photos: [], reportCount: 0, isWatching: false, userMarker: null, isPreviewOpen: false, manualPos: null, tempLine: null, movingObj: null };
+    const ACI_COLORS = {
+        1: "#FF0000", 2: "#FFFF00", 3: "#00FF00", 4: "#00FFFF", 5: "#0000FF", 6: "#FF00FF", 7: "#FFFFFF",
+        8: "#808080", 9: "#C0C0C0", 10: "#FF0000", 11: "#FF7F7F", 12: "#A50000", 13: "#A55252",
+        250: "#333333", 251: "#505050", 252: "#696969", 253: "#828282", 254: "#bebebe", 255: "#ffffff"
+    };
+
+    const STATE = {
+        map: null, mode: null, col: '#FF3B30', datum: 'ITRF', dom: 30,
+        layers: L.featureGroup(), projectLayers: {}, photos: [], reportCount: 0,
+        isWatching: false, userMarker: null, isSaved: false,
+        startLatLng: null, tempLine: null, movingObj: null, isPreviewOpen: false
+    };
 
     function init() {
-        STATE.map = L.map('map', { zoomControl: false, tap: false }).setView([39, 35], 6);
-        L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21 }).addTo(STATE.map);
-        L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(STATE.map);
-        STATE.layers.addTo(STATE.map);
+        STATE.map = L.map('map', { zoomControl: false, zoomSnap: 0.1, renderer: L.canvas({ tolerance: 30 }), tap: false }).setView([39, 35], 6);
         
+        const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21, crossOrigin: 'anonymous' });
+        const googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21, crossOrigin: 'anonymous' });
+        
+        googleHybrid.addTo(STATE.map);
+
+        const baseMaps = { "Hibrit Uydu": googleHybrid, "Sokak Haritası": googleStreets };
+        L.control.layers(baseMaps, null, { position: 'topright', collapsed: true }).addTo(STATE.map);
+
+        L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(STATE.map);
+
+        STATE.layers.addTo(STATE.map);
         STATE.map.on('click', (e) => { if(STATE.isPreviewOpen) { closePreview(); return; } closeAllMenus(); onMapClick(e); });
         STATE.map.on('mousemove', onMapMove);
         STATE.map.on('locationfound', (e) => {
             if(!STATE.userMarker) STATE.userMarker = L.marker(e.latlng, { icon: L.divIcon({ className: 'pulse-icon', iconSize: [18,18] }) }).addTo(STATE.map);
             else STATE.userMarker.setLatLng(e.latlng);
             if(STATE.isWatching) STATE.map.setView(e.latlng, 18);
+            document.getElementById('gps-text').innerText = "DURDUR";
         });
-
         document.getElementById('f-multi').onchange = e => handlePhotos(e.target.files);
         document.getElementById('f-folder').onchange = e => handlePhotos(e.target.files);
         document.getElementById('f-project').onchange = e => handleProjectFile(e.target.files[0]);
@@ -148,27 +169,110 @@
         updateReportName();
     }
 
+    async function handleProjectFile(f) {
+        if(!f) return;
+        showProg("VERİLER AYRIŞTIRILIYOR", 20);
+        Object.values(STATE.projectLayers).forEach(l => STATE.map.removeLayer(l));
+        STATE.projectLayers = {};
+        document.getElementById('layer-manager').innerHTML = '';
+
+        const ext = f.name.split('.').pop().toLowerCase();
+        const r = new FileReader();
+
+        r.onload = async (e) => {
+            if(ext === 'dxf') {
+                const dxf = new DxfParser().parseSync(e.target.result);
+                const prj = STATE.datum === 'ITRF' ? `+proj=tmerc +lat_0=0 +lon_0=${STATE.dom} +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs` : `+proj=tmerc +lat_0=0 +lon_0=${STATE.dom} +k=1 +x_0=500000 +y_0=0 +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +units=m +no_defs`;
+                
+                dxf.entities.forEach(ent => {
+                    if(['LINE','LWPOLYLINE','POLYLINE','CIRCLE','ARC'].includes(ent.type)) {
+                        const layerCfg = (dxf.tables && dxf.tables.layer && dxf.tables.layer.layers) ? dxf.tables.layer.layers[ent.layer] : null;
+                        const rawColorIdx = ent.colorIndex !== undefined ? ent.colorIndex : (ent.color !== undefined ? ent.color : 256);
+                        const layerColorIdx = layerCfg ? (layerCfg.colorIndex !== undefined ? layerCfg.colorIndex : layerCfg.color) : 7;
+                        const finalIdx = (rawColorIdx === 256 || rawColorIdx === undefined) ? layerColorIdx : rawColorIdx;
+                        const finalColor = ACI_COLORS[finalIdx] || "#ffffff";
+
+                        if (ent.type === 'CIRCLE' || ent.type === 'ARC') {
+                            const center = proj4(prj, 'EPSG:4326', [ent.center.x, ent.center.y]);
+                            const circle = L.circle([center[1], center[0]], { radius: ent.radius, color: finalColor, weight: 1.5, fill: false });
+                            addToLayerGroup(ent.layer || "0", circle);
+                        } else {
+                            const rawPts = ent.vertices || [ent.start, ent.end];
+                            const pts = rawPts.map(v => {
+                                const res = proj4(prj, 'EPSG:4326', [v.x, v.y]);
+                                return [res[1], res[0]];
+                            });
+                            const line = L.polyline(pts, {color: finalColor, weight: 1.5});
+                            addToLayerGroup(ent.layer || "0", line);
+                        }
+                    }
+                });
+            } else {
+                let k = ext==='kmz' ? await (await JSZip.loadAsync(e.target.result)).file(/.*\.kml$/i)[0].async("string") : e.target.result;
+                const geojson = toGeoJSON.kml(new DOMParser().parseFromString(k, "text/xml"));
+                L.geoJSON(geojson, {
+                    style: f => ({ color: f.properties.stroke || f.properties.color || "#FF3B30", weight: 2 }),
+                    onEachFeature: (f, l) => addToLayerGroup(f.properties.layer || f.properties.name || "KMZ", l)
+                });
+            }
+            renderLayerUI();
+            const allBounds = L.featureGroup(Object.values(STATE.projectLayers)).getBounds();
+            if(allBounds.isValid()) STATE.map.fitBounds(allBounds);
+            showProg("TAMAM", 100);
+        };
+        (ext==='kmz') ? r.readAsArrayBuffer(f) : r.readAsText(f);
+    }
+
+    function addToLayerGroup(name, layer) {
+        if(!STATE.projectLayers[name]) STATE.projectLayers[name] = L.featureGroup().addTo(STATE.map);
+        layer.addTo(STATE.projectLayers[name]);
+        attachInteractions(layer);
+    }
+
+    function renderLayerUI() {
+        const container = document.getElementById('layer-manager');
+        container.innerHTML = `<h3 style="font-size:12px; margin:10px 0;">KATMANLAR</h3>`;
+        const allBtn = document.createElement('div');
+        allBtn.className = 'layer-row'; allBtn.style.background = '#333'; allBtn.style.color = '#fff';
+        allBtn.innerHTML = `<span class="layer-name">TÜMÜNÜ AÇ/KAPAT</span><div class="toggle-switch on" onclick="toggleAllLayers(this)"></div>`;
+        container.appendChild(allBtn);
+        Object.keys(STATE.projectLayers).forEach(key => {
+            const row = document.createElement('div'); row.className = 'layer-row';
+            row.innerHTML = `<span class="layer-name">${key}</span><div class="toggle-switch on" onclick="toggleLayer('${key}', this)"></div>`;
+            container.appendChild(row);
+        });
+    }
+
+    function toggleLayer(name, el) {
+        const grp = STATE.projectLayers[name];
+        if(STATE.map.hasLayer(grp)) { STATE.map.removeLayer(grp); el.classList.remove('on'); }
+        else { STATE.map.addLayer(grp); el.classList.add('on'); }
+    }
+
+    function toggleAllLayers(el) {
+        const isOn = el.classList.contains('on');
+        Object.keys(STATE.projectLayers).forEach(k => {
+            if(isOn) STATE.map.removeLayer(STATE.projectLayers[k]);
+            else if(!STATE.map.hasLayer(STATE.projectLayers[k])) STATE.map.addLayer(STATE.projectLayers[k]);
+        });
+        el.classList.toggle('on');
+        document.querySelectorAll('#layer-manager .toggle-switch').forEach(s => isOn ? s.classList.remove('on') : s.classList.add('on'));
+    }
+
     async function handlePhotos(files) {
         if(!files || files.length === 0) return;
         const fileArray = Array.from(files);
         for(let i=0; i < fileArray.length; i++) {
             showProg("İŞLENİYOR " + (i+1) + "/" + fileArray.length, ((i+1)/fileArray.length)*100);
-            let f = fileArray[i];
+            let f = fileArray[i], b = f; 
             try {
-                // Mobil EXIF Fix: Önce koordinatı alıyoruz
-                let gps = STATE.manualPos ? {latitude: STATE.manualPos.lat, longitude: STATE.manualPos.lng} : await exifr.gps(f);
-                
-                let b = f;
                 if(f.name.toLowerCase().endsWith('.heic')) b = await heic2any({blob: f, toType: "image/jpeg", quality: 0.7});
-                
+                const gps = STATE.manualPos ? {latitude: STATE.manualPos.lat, longitude: STATE.manualPos.lng} : await exifr.gps(f);
                 if(gps) {
-                    const xlData = await processImg(b, 1200, 0.75);
-                    const kmzData = await processImg(b, 600, 0.5);  
+                    const xlData = await processImg(b, 1200, 0.75), kmzData = await processImg(b, 600, 0.5);  
                     const m = L.marker([gps.latitude, gps.longitude], { icon: L.divIcon({className: 'photo-marker', iconSize:[24,24]}) }).addTo(STATE.layers);
                     STATE.photos.push({ lat: gps.latitude, lng: gps.longitude, xlSrc: xlData, kmzSrc: kmzData, marker: m, approved: false, reportOrder: 0 });
                     attachInteractions(m);
-                } else {
-                    alert(f.name + " içerisinde konum verisi bulunamadı!");
                 }
             } catch (err) { console.error(err); }
         }
@@ -184,10 +288,15 @@
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     let w = img.width, h = img.height;
-                    const ratio = Math.min(maxSide/w, maxSide/h);
-                    canvas.width = w * ratio; canvas.height = h * ratio;
-                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                    res(canvas.toDataURL('image/jpeg', qual));
+                    canvas.width = (w > h) ? h : w; canvas.height = (w > h) ? w : h;
+                    const ctx = canvas.getContext('2d');
+                    if(w > h) { ctx.translate(canvas.width/2, canvas.height/2); ctx.rotate(90 * Math.PI / 180); ctx.drawImage(img, -w/2, -h/2); }
+                    else ctx.drawImage(img, 0, 0);
+                    const finalCanvas = document.createElement('canvas');
+                    const ratio = Math.min(maxSide/canvas.height, maxSide/canvas.width);
+                    finalCanvas.width = canvas.width * ratio; finalCanvas.height = canvas.height * ratio;
+                    finalCanvas.getContext('2d').drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+                    res(finalCanvas.toDataURL('image/jpeg', qual));
                 };
                 img.src = e.target.result;
             };
@@ -213,84 +322,90 @@
         else if(STATE.mode === 'move' && STATE.movingObj) { if(STATE.movingObj.setLatLng) STATE.movingObj.setLatLng(e.latlng); }
     }
 
-    function handleRuler(ll) {
-        if(!STATE.startLatLng) {
-            STATE.startLatLng = ll;
-            STATE.tempLine = L.polyline([ll, ll], {color: STATE.col, weight: 3, dashArray: '5,8'}).addTo(STATE.map);
-        } else {
-            const d = STATE.startLatLng.distanceTo(ll);
-            const txt = d > 1000 ? (d/1000).toFixed(2)+'km' : Math.round(d)+'m';
-            const line = L.polyline([STATE.startLatLng, ll], {color: STATE.col, weight: 4}).addTo(STATE.layers).bindTooltip(txt, {permanent: true, direction: 'center', className: 'custom-label'});
-            attachInteractions(line);
-            STATE.map.removeLayer(STATE.tempLine);
-            STATE.startLatLng = null; setMode(null);
-        }
-    }
-
-    function handleText(ll) {
-        const v = prompt("Not:");
-        if(v) {
-            const m = L.marker(ll, { icon: L.divIcon({ className: 'custom-label', html: v, iconSize: null }) }).addTo(STATE.layers);
-            attachInteractions(m);
-        }
+    function handleNavigation(ll) {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const url = isMobile 
+            ? `google.navigation:q=${ll.lat},${ll.lng}` 
+            : `https://www.google.com/maps?q=${ll.lat},${ll.lng}`;
+        
+        window.open(url, '_blank');
         setMode(null);
     }
 
-    function attachInteractions(layer) {
-        layer.on('mousedown touchstart', (e) => {
-            L.DomEvent.stopPropagation(e);
-            if(STATE.mode === 'erase') { 
-                STATE.layers.removeLayer(layer); 
-                reorderPhotos(); 
-            } else if(STATE.mode === 'move') { 
-                STATE.movingObj = layer; 
-                STATE.map.dragging.disable(); 
-            } else if(layer instanceof L.Marker && layer.options.icon.options.className.includes('photo-marker')) { 
-                openPreview(STATE.photos.find(p => p.marker === layer)); 
+    async function runExcelReport(tpl) {
+        showProg("KAPAK OLUŞTURULUYOR", 10);
+        const wb = new ExcelJS.Workbook(); await wb.xlsx.load(tpl);
+        const canvas = await html2canvas(document.getElementById('map'), { useCORS:true, x:window.innerWidth/2-300, y:window.innerHeight/2-225, width:600, height:450, scale:2 });
+        const wsKapak = wb.getWorksheet('KAPAK');
+        if(wsKapak) wsKapak.addImage(wb.addImage({ base64: canvas.toDataURL('image/jpeg', 0.9), extension: 'jpeg' }), { tl: { col: 1, row: 30 }, ext: { width: 750, height: 560 } });
+        const bounds = getReportBounds();
+        const approved = STATE.photos.filter(p => p.approved && STATE.layers.hasLayer(p.marker) && bounds.contains([p.lat, p.lng])).sort((a,b) => a.reportOrder - b.reportOrder);
+        const sfCount = Math.ceil(approved.length / 4);
+        const blankModel = JSON.parse(JSON.stringify(wb.getWorksheet('sf1').model));
+        for(let i = 2; i <= sfCount; i++) { let ws = wb.addWorksheet(`sf${i}`); ws.model = blankModel; ws.name = `sf${i}`; }
+        for(let i = 1; i <= sfCount; i++) {
+            const ws = wb.getWorksheet(`sf${i}`);
+            for(let j = 0; j < 4; j++) {
+                const pIdx = (i-1)*4 + j; if(!approved[pIdx]) break; const p = approved[pIdx];
+                const cellMap = [{no:'D2',link:'E2',lat:'G2',lng:'I2',col:2.02,row:2},{no:'K2',link:'L2',lat:'N2',lng:'P2',col:9.02,row:2},{no:'D32',link:'E32',lat:'G32',lng:'I32',col:2.02,row:32},{no:'K32',link:'L32',lat:'N32',lng:'P32',col:9.02,row:32}][j];
+                ws.getCell(cellMap.no).value = pIdx + 1; ws.getCell(cellMap.lat).value = p.lat.toFixed(6); ws.getCell(cellMap.lng).value = p.lng.toFixed(6);
+                ws.getCell(cellMap.link).value = { text: 'Konum', hyperlink: `https://www.google.com/maps?q=${p.lat},${p.lng}` };
+                ws.addImage(wb.addImage({base64: p.xlSrc, extension: 'jpeg'}), { tl: { col: cellMap.col, row: cellMap.row }, ext: { width: 378, height: 567 }, editAs: 'absolute' });
+            }
+        }
+        saveAs(new Blob([await wb.xlsx.writeBuffer()]), document.getElementById('report-name').value + ".xlsx");
+        closeReportUI(); showProg("TAMAM", 100);
+    }
+
+    async function runKMZ() {
+        showProg("KMZ ÜRETİLİYOR", 10);
+        const zip = new JSZip(), bounds = getReportBounds();
+        let kml = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>`;
+        const approved = STATE.photos.filter(p => p.approved && STATE.layers.hasLayer(p.marker) && bounds.contains([p.lat, p.lng])).sort((a,b) => a.reportOrder - b.reportOrder);
+        approved.forEach((p, i) => { zip.file(`files/p${i}.jpg`, p.kmzSrc.split(',')[1], {base64: true}); kml += `<Placemark><name>${i+1}</name><description><![CDATA[<img src="files/p${i}.jpg" width="300">]]></description><Point><coordinates>${p.lng},${p.lat}</coordinates></Point></Placemark>`; });
+        STATE.layers.eachLayer(l => {
+            if(l instanceof L.Polyline && !(l instanceof L.Polygon) && !(l instanceof L.Marker)) {
+                const c = l.getLatLngs().map(x => `${x.lng},${x.lat},0`).join(' '), hex = (l.options.color || '#FF3B30').replace('#', '');
+                kml += `<Placemark><Style><LineStyle><color>ff${hex.substring(4,6)}${hex.substring(2,4)}${hex.substring(0,2)}</color><width>4</width></LineStyle></Style><LineString><coordinates>${c}</coordinates></LineString></Placemark>`;
             }
         });
+        kml += `</Document></kml>`; zip.file("doc.kml", kml);
+        saveAs(await zip.generateAsync({type:"blob"}), document.getElementById('report-name').value + ".kmz");
+        closeReportUI(); showProg("TAMAM", 100);
     }
 
-    function setMode(m) { 
-        STATE.mode = (STATE.mode === m) ? null : m; 
-        document.querySelectorAll('.btn-sys').forEach(b => b.classList.remove('active')); 
-        if(STATE.mode) document.getElementById('btn-' + STATE.mode)?.classList.add('active');
-        if(STATE.mode !== 'ruler') STATE.startLatLng = null;
-    }
-
-    function toggleGPS() {
-        if(STATE.isWatching) {
-            STATE.map.stopLocate();
-            STATE.isWatching = false;
-            document.getElementById('gps-text').innerText = "KONUM";
-        } else {
-            STATE.map.locate({ watch: true, setView: true, enableHighAccuracy: true });
-            STATE.isWatching = true;
-            document.getElementById('gps-text').innerText = "DURDUR";
-        }
-    }
-
-    function trigger(id) { document.getElementById(id).click(); }
-    function toggleMenu(id, e) { if(e) e.stopPropagation(); const el = document.getElementById(id), op = el.style.display==='flex'; closeAllMenus(); if(!op) el.style.display='flex'; }
-    function closeAllMenus() { document.querySelectorAll('.submenu').forEach(s => s.style.display='none'); }
-    function setCol(c, el) { STATE.col = c; document.querySelectorAll('#m-edit .tile-btn').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); }
-    function setProj(v, el) { STATE.datum = v; el.parentElement.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); }
-    function setDOM(v, el) { STATE.dom = v; el.parentElement.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); }
-    function updateReportName() { document.getElementById('report-name').value = "SAHA_RAPORU_" + new Date().toISOString().slice(0,10); }
-    function showProg(msg, p) { 
-        document.getElementById('progress-ui').style.display='block'; 
-        document.getElementById('pg-bar').style.width=p+'%'; 
-        document.getElementById('pg-text').innerText=`${msg} %${Math.round(p)}`; 
-        if(p>=100) setTimeout(()=>document.getElementById('progress-ui').style.display='none', 800); 
-    }
-    function openPreview(p) { STATE.activePhoto = p; document.getElementById('preview-img').src = p.xlSrc; document.getElementById('preview-modal').style.display='block'; setTimeout(() => { STATE.isPreviewOpen = true; }, 100); }
-    function closePreview() { document.getElementById('preview-modal').style.display='none'; STATE.isPreviewOpen = false; }
-    function openReportUI(t) { STATE.reportType = t; closeAllMenus(); document.getElementById('report-frame').style.display='block'; }
-    function closeReportUI() { document.getElementById('report-frame').style.display='none'; }
     function approvePhoto() { if(STATE.activePhoto) { if(!STATE.activePhoto.approved) { STATE.reportCount++; STATE.activePhoto.approved = true; STATE.activePhoto.reportOrder = STATE.reportCount; STATE.activePhoto.marker.setIcon(L.divIcon({className:'photo-marker approved', html:STATE.reportCount, iconSize:[34,34]})); } closePreview(); } }
     function cancelSelection() { if(STATE.activePhoto?.approved) { STATE.activePhoto.approved = false; STATE.activePhoto.marker.setIcon(L.divIcon({className:'photo-marker', iconSize:[24,24]})); reorderPhotos(); } closePreview(); }
     function reorderPhotos() { const approved = STATE.photos.filter(p => p.approved).sort((a,b) => a.reportOrder - b.reportOrder); STATE.reportCount = approved.length; approved.forEach((p, i) => { p.reportOrder = i + 1; p.marker.setIcon(L.divIcon({className:'photo-marker approved', html: p.reportOrder, iconSize:[34,34]})); }); }
-    function getReportBounds() { return STATE.map.getBounds(); }
+    function attachInteractions(layer) { layer.on('mousedown touchstart', (e) => { L.DomEvent.stopPropagation(e); if(STATE.mode === 'erase') { STATE.layers.removeLayer(layer); Object.values(STATE.projectLayers).forEach(grp => grp.removeLayer(layer)); reorderPhotos(); } else if(STATE.mode === 'move') { STATE.movingObj = layer; STATE.map.dragging.disable(); } else if(layer instanceof L.Marker && layer.options.icon.options.className.includes('photo-marker')) { openPreview(STATE.photos.find(p => p.marker === layer)); } }); }
+    function handleText(ll) { const v = prompt("Not:"); if(v) { const m = L.marker(ll, { icon: L.divIcon({ className: 'custom-label', html: v.replace(/\\n/g, '<br>'), iconSize: null }) }).addTo(STATE.layers); attachInteractions(m); } setMode(null); }
+    function toggleGPS() { if(STATE.isWatching) { STATE.map.stopLocate(); STATE.isWatching = false; document.getElementById('gps-text').innerText = "KONUM"; } else { document.getElementById('gps-text').innerText = "ARANIYOR"; STATE.map.locate({ watch: true, setView: true, maxZoom: 18, enableHighAccuracy: true }); STATE.isWatching = true; } }
+    function openPreview(p) { STATE.activePhoto = p; document.getElementById('preview-img').src = p.xlSrc; document.getElementById('preview-modal').style.display='block'; setTimeout(() => { STATE.isPreviewOpen = true; }, 100); }
+    function closePreview() { document.getElementById('preview-modal').style.display='none'; STATE.isPreviewOpen = false; }
+    function handleRuler(ll) { if(!STATE.startLatLng) { STATE.startLatLng = ll; STATE.tempLine = L.polyline([ll, ll], {color: STATE.col, weight: 3, dashArray: '5,8'}).addTo(STATE.map); } else { const d = STATE.startLatLng.distanceTo(ll), txt = d > 1000 ? (d/1000).toFixed(2)+'km' : Math.round(d)+'m'; const line = L.polyline([STATE.startLatLng, ll], {color: STATE.col, weight: 4}).addTo(STATE.layers).bindTooltip(txt, {permanent: true, direction: 'center', className: 'custom-label'}); attachInteractions(line); STATE.map.removeLayer(STATE.tempLine); STATE.startLatLng = null; setMode(null); } }
+    function toggleMenu(id, e) { if(e) e.stopPropagation(); const el = document.getElementById(id), op = el.style.display==='flex'; closeAllMenus(); if(!op) el.style.display='flex'; }
+    function closeAllMenus() { document.querySelectorAll('.submenu').forEach(s => s.style.display='none'); }
+    function openReportUI(t) { STATE.reportType = t; closeAllMenus(); document.getElementById('report-frame').style.display='block'; }
+    function closeReportUI() { document.getElementById('report-frame').style.display='none'; }
+    function showProg(msg, p) { document.getElementById('progress-ui').style.display='block'; document.getElementById('pg-bar').style.width=p+'%'; document.getElementById('pg-text').innerText=`${msg} %${Math.round(p)}`; if(p>=100) setTimeout(()=>document.getElementById('progress-ui').style.display='none', 800); }
+    function setMode(m) { 
+        STATE.mode = (STATE.mode === m) ? null : m; 
+        document.querySelectorAll('.btn-sys').forEach(b => b.classList.remove('active')); 
+        document.querySelectorAll('.nav-item').forEach(n => n.style.color = 'var(--dark)');
+        if(STATE.mode) {
+            document.getElementById('btn-' + STATE.mode)?.classList.add('active');
+            if(STATE.mode === 'navigate') document.getElementById('btn-navigate').style.color = 'var(--blue)';
+        }
+    }
+    function setProj(v, el) { STATE.datum = v; updateTiles(el); }
+    function setDOM(v, el) { STATE.dom = v; updateTiles(el); }
+    function updateTiles(el) { el.parentElement.querySelectorAll('.tile-btn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
+    function trigger(id) { document.getElementById(id).click(); }
+    function setCol(c, el) { STATE.col = c; document.querySelectorAll('.tile-btn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
+    function updateReportName() { const d = new Date(); document.getElementById('report-name').value = `Rapor_${d.getDate()}.${d.getMonth()+1}_${d.getHours()}${d.getMinutes()}`; }
+    function getReportBounds() { const c = STATE.map.getSize().divideBy(2); return L.latLngBounds(STATE.map.containerPointToLatLng([c.x-300, c.y-225]), STATE.map.containerPointToLatLng([c.x+300, c.y+225])); }
+    function handleSaveToggle() { STATE.isSaved = !STATE.isSaved; document.getElementById('save-txt').innerText = STATE.isSaved ? "DÜZENLE" : "KAYDET"; STATE.layers.eachLayer(l => { if(l instanceof L.Marker && STATE.photos.find(p=>p.marker===l && !p.approved)) l.getElement().style.opacity = STATE.isSaved ? "0" : "1"; }); }
+    window.onload = init;
 </script>
 </body>
 </html>
