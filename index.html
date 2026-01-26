@@ -36,7 +36,25 @@
         .photo-marker { background: var(--red); width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
         .photo-marker.approved { background: var(--blue); width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; }
         .pulse-icon { width: 18px; height: 18px; background: var(--blue); border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px var(--blue); }
-        #report-frame { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 600px; height: 60vh; border: 4px dashed var(--blue); z-index: 2000; pointer-events: none; box-shadow: 0 0 0 5000px rgba(0,0,0,0.7); }
+        
+        /* --- GÜNCELLENEN RAPOR ÇERÇEVESİ (BÜYÜTÜLMÜŞ & GÜVENLİ) --- */
+        #report-frame { 
+            display: none; 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            width: 95%; /* Ekrana yayıl */
+            max-width: 1050px; /* Eski 600px'in %75 fazlası */
+            max-height: 70vh; /* Mobilde butonların taşmasını önlemek için sınır */
+            aspect-ratio: 4/3; 
+            border: 4px dashed var(--blue); 
+            z-index: 2000; 
+            pointer-events: none; 
+            box-shadow: 0 0 0 5000px rgba(0,0,0,0.7); 
+        }
+        /* --------------------------------------------------------- */
+
         #preview-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 340px; background: white; border-radius: 30px; z-index: 9999; padding: 20px; text-align: center; box-shadow: 0 0 100px rgba(0,0,0,0.8); }
         .tile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
         .tile-btn { padding: 8px; border-radius: 10px; border: 2px solid var(--gray); font-size: 10px; font-weight: 900; text-align: center; cursor: pointer; background: white; }
@@ -62,7 +80,7 @@
 <div class="signature">ersin.kucukcamur</div>
 
 <div id="report-frame">
-    <div style="position: absolute; bottom: -85px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; pointer-events: auto;">
+    <div style="position: absolute; bottom: -70px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; pointer-events: auto;">
         <button class="btn-sys" style="background:var(--blue); color:white; padding:15px 45px;" id="btn-final-export">VERİYİ AKTAR</button>
         <button class="btn-sys" style="background:var(--red); color:white; padding:15px 45px;" onclick="closeReportUI()">VAZGEÇ</button>
     </div>
@@ -250,38 +268,30 @@
         document.querySelectorAll('#layer-manager .toggle-switch').forEach(s => isOn ? s.classList.remove('on') : s.classList.add('on'));
     }
 
-    // ✅ REVİZE EDİLMİŞ handlePhotos (Mobil EXIF GPS fix)
     async function handlePhotos(files) {
-        if (!files || files.length === 0) return;
+        if(!files || files.length === 0) return;
         const fileArray = Array.from(files);
-        for (let i = 0; i < fileArray.length; i++) {
-            showProg("İŞLENİYOR " + (i + 1) + "/" + fileArray.length, ((i + 1) / fileArray.length) * 100);
-            let f = fileArray[i];
-            let blob = f;
+        for(let i=0; i < fileArray.length; i++) {
+            showProg("İŞLENİYOR " + (i+1) + "/" + fileArray.length, ((i+1)/fileArray.length)*100);
+            let f = fileArray[i], b = f; 
             try {
-                if (f.name.toLowerCase().endsWith('.heic')) {
-                    blob = await heic2any({ blob: f, toType: "image/jpeg", quality: 0.8 });
-                }
+                if(f.name.toLowerCase().endsWith('.heic')) b = await heic2any({blob: f, toType: "image/jpeg", quality: 0.8});
                 let gps = null;
-                try { gps = await exifr.gps(blob); } catch {}
+                try { gps = await exifr.gps(b); } catch {}
                 if (!gps) {
-                    const exif = await exifr.parse(blob, { gps: true });
-                    if (exif?.latitude && exif?.longitude) {
-                        gps = { latitude: exif.latitude, longitude: exif.longitude };
-                    }
+                    const exif = await exifr.parse(b, { gps: true });
+                    if (exif?.latitude && exif?.longitude) gps = { latitude: exif.latitude, longitude: exif.longitude };
                 }
-                if (STATE.manualPos) {
-                    gps = { latitude: STATE.manualPos.lat, longitude: STATE.manualPos.lng };
+                if (STATE.manualPos) gps = { latitude: STATE.manualPos.lat, longitude: STATE.manualPos.lng };
+                if (gps && gps.latitude && gps.longitude) {
+                    const xlData = await processImg(b, 1200, 0.75), kmzData = await processImg(b, 600, 0.5);  
+                    const m = L.marker([gps.latitude, gps.longitude], { icon: L.divIcon({className: 'photo-marker', iconSize:[24,24]}) }).addTo(STATE.layers);
+                    STATE.photos.push({ lat: gps.latitude, lng: gps.longitude, xlSrc: xlData, kmzSrc: kmzData, marker: m, approved: false, reportOrder: 0 });
+                    attachInteractions(m);
                 }
-                if (!gps || !gps.latitude || !gps.longitude) continue;
-                const xlData = await processImg(blob, 1200, 0.75);
-                const kmzData = await processImg(blob, 600, 0.5);
-                const marker = L.marker([gps.latitude, gps.longitude], { icon: L.divIcon({ className: 'photo-marker', iconSize: [24, 24] }) }).addTo(STATE.layers);
-                STATE.photos.push({ lat: gps.latitude, lng: gps.longitude, xlSrc: xlData, kmzSrc: kmzData, marker: marker, approved: false, reportOrder: 0 });
-                attachInteractions(marker);
-            } catch (err) { console.error("Fotoğraf işleme hatası:", err); }
+            } catch (err) { console.error(err); }
         }
-        if (STATE.layers.getBounds().isValid()) { STATE.map.fitBounds(STATE.layers.getBounds(), { padding: [50, 50] }); }
+        if(STATE.layers.getBounds().isValid()) STATE.map.fitBounds(STATE.layers.getBounds(), {padding:[50,50]});
         STATE.manualPos = null;
     }
 
@@ -327,12 +337,9 @@
         else if(STATE.mode === 'move' && STATE.movingObj) { if(STATE.movingObj.setLatLng) STATE.movingObj.setLatLng(e.latlng); }
     }
 
-    // ✅ Yol Tarifi URL Düzeltmesi
     function handleNavigation(ll) {
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const url = isMobile 
-            ? `google.navigation:q=${ll.lat},${ll.lng}` 
-            : `https://www.google.com/maps?q=${ll.lat},${ll.lng}`;
+        const url = isMobile ? `google.navigation:q=${ll.lat},${ll.lng}` : `https://www.google.com/maps?q=${ll.lat},${ll.lng}`;
         window.open(url, '_blank');
         setMode(null);
     }
@@ -340,7 +347,11 @@
     async function runExcelReport(tpl) {
         showProg("KAPAK OLUŞTURULUYOR", 10);
         const wb = new ExcelJS.Workbook(); await wb.xlsx.load(tpl);
-        const canvas = await html2canvas(document.getElementById('map'), { useCORS:true, x:window.innerWidth/2-300, y:window.innerHeight/2-225, width:600, height:450, scale:2 });
+        
+        // --- DİNAMİK 4x3 CAPTURE ---
+        const frame = document.getElementById('report-frame').getBoundingClientRect();
+        const canvas = await html2canvas(document.getElementById('map'), { useCORS:true, x:frame.left, y:frame.top, width:frame.width, height:frame.height, scale:2 });
+        
         const wsKapak = wb.getWorksheet('KAPAK');
         if(wsKapak) wsKapak.addImage(wb.addImage({ base64: canvas.toDataURL('image/jpeg', 0.9), extension: 'jpeg' }), { tl: { col: 1, row: 30 }, ext: { width: 750, height: 560 } });
         const bounds = getReportBounds();
@@ -354,7 +365,6 @@
                 const pIdx = (i-1)*4 + j; if(!approved[pIdx]) break; const p = approved[pIdx];
                 const cellMap = [{no:'D2',link:'E2',lat:'G2',lng:'I2',col:2.02,row:2},{no:'K2',link:'L2',lat:'N2',lng:'P2',col:9.02,row:2},{no:'D32',link:'E32',lat:'G32',lng:'I32',col:2.02,row:32},{no:'K32',link:'L32',lat:'N32',lng:'P32',col:9.02,row:32}][j];
                 ws.getCell(cellMap.no).value = pIdx + 1; ws.getCell(cellMap.lat).value = p.lat.toFixed(6); ws.getCell(cellMap.lng).value = p.lng.toFixed(6);
-                // ✅ Excel Konum Link Düzeltmesi
                 ws.getCell(cellMap.link).value = { text: 'Konum', hyperlink: `https://www.google.com/maps?q=${p.lat},${p.lng}` };
                 ws.addImage(wb.addImage({base64: p.xlSrc, extension: 'jpeg'}), { tl: { col: cellMap.col, row: cellMap.row }, ext: { width: 378, height: 567 }, editAs: 'absolute' });
             }
@@ -409,7 +419,14 @@
     function trigger(id) { document.getElementById(id).click(); }
     function setCol(c, el) { STATE.col = c; document.querySelectorAll('.tile-btn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
     function updateReportName() { const d = new Date(); document.getElementById('report-name').value = `Rapor_${d.getDate()}.${d.getMonth()+1}_${d.getHours()}${d.getMinutes()}`; }
-    function getReportBounds() { const c = STATE.map.getSize().divideBy(2); return L.latLngBounds(STATE.map.containerPointToLatLng([c.x-300, c.y-225]), STATE.map.containerPointToLatLng([c.x+300, c.y+225])); }
+    function getReportBounds() { 
+        const frame = document.getElementById('report-frame').getBoundingClientRect();
+        const c = STATE.map.getSize().divideBy(2); 
+        return L.latLngBounds(
+            STATE.map.containerPointToLatLng([c.x-(frame.width/2), c.y-(frame.height/2)]), 
+            STATE.map.containerPointToLatLng([c.x+(frame.width/2), c.y+(frame.height/2)])
+        ); 
+    }
     function handleSaveToggle() { STATE.isSaved = !STATE.isSaved; document.getElementById('save-txt').innerText = STATE.isSaved ? "DÜZENLE" : "KAYDET"; STATE.layers.eachLayer(l => { if(l instanceof L.Marker && STATE.photos.find(p=>p.marker===l && !p.approved)) l.getElement().style.opacity = STATE.isSaved ? "0" : "1"; }); }
     window.onload = init;
 </script>
