@@ -3,432 +3,354 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Saha Raporu ersin.kucukcamur</title>
+    <title>ersin.kucukcamur_dxf goruntuleyici</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@4.5.0/dist/togeojson.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@4.5.0/dist/togeojson.umd.js"></script>
 
     <style>
-        :root { --glass: rgba(255, 255, 255, 0.98); --blue: #007AFF; --red: #FF3B30; --dark: #1C1C1E; --gray: #F2F2F7; }
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, sans-serif; background: #000; position: fixed; }
-        #map { width: 100%; height: 100%; z-index: 1; outline: none; }
-        #progress-ui { display: none; position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 600px; z-index: 2001; }
-        .pg-bg { background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); height: 26px; border-radius: 13px; overflow: hidden; position: relative; border: 1px solid rgba(255,255,255,0.2); }
-        #pg-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #007AFF, #00C7FF); transition: width 0.2s; }
-        #pg-text { position: absolute; width: 100%; text-align: center; color: white; font-size: 11px; font-weight: 900; line-height: 26px; }
-        .glass { background: var(--glass); backdrop-filter: blur(25px); border-radius: 25px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 15px 45px rgba(0,0,0,0.3); position: absolute; z-index: 1000; }
-        .bottom-nav { bottom: 20px; left: 50%; transform: translateX(-50%); width: 96%; max-width: 800px; display: flex; justify-content: space-around; padding: 12px 0; align-items: center; }
-        .nav-item { text-align: center; cursor: pointer; flex: 1; }
-        .nav-text { font-size: 9px; font-weight: 800; color: var(--dark); display: block; margin-top: 5px; text-transform: uppercase; }
-        .submenu { display: none; bottom: 100px; left: 50%; transform: translateX(-50%); width: 85%; max-width: 320px; padding: 18px; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
-        .btn-sys { width: 100%; padding: 13px; border: none; border-radius: 14px; font-weight: 800; font-size: 11px; cursor: pointer; background: #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
-        .btn-sys.active { background: var(--blue); color: white; }
-        .custom-label { background: white !important; border: 2px solid #000 !important; border-radius: 6px !important; padding: 4px 8px !important; font-weight: 900 !important; font-size: 11px !important; text-align: left; white-space: pre-wrap; display: inline-block; }
-        .photo-marker { background: var(--red); width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-        .photo-marker.approved { background: var(--blue); width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; }
-        .pulse-icon { width: 18px; height: 18px; background: var(--blue); border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px var(--blue); }
+        :root { --blue: #007AFF; --dark: #1C1C1E; --glass: rgba(255,255,255,0.95); --ruler: #FF3B30; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #000; touch-action: none; }
         
-        /* --- GÜNCELLENEN RAPOR ÇERÇEVESİ (BÜYÜTÜLMÜŞ & GÜVENLİ) --- */
-        #report-frame { 
-            display: none; 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
-            width: 95%; /* Ekrana yayıl */
-            max-width: 1050px; /* Eski 600px'in %75 fazlası */
-            max-height: 70vh; /* Mobilde butonların taşmasını önlemek için sınır */
-            aspect-ratio: 4/3; 
-            border: 4px dashed var(--blue); 
-            z-index: 2000; 
-            pointer-events: none; 
-            box-shadow: 0 0 0 5000px rgba(0,0,0,0.7); 
-        }
-        /* --------------------------------------------------------- */
+        #map { width: 100%; height: 100%; position: absolute; z-index: 1; }
 
-        #preview-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 340px; background: white; border-radius: 30px; z-index: 9999; padding: 20px; text-align: center; box-shadow: 0 0 100px rgba(0,0,0,0.8); }
-        .tile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-        .tile-btn { padding: 8px; border-radius: 10px; border: 2px solid var(--gray); font-size: 10px; font-weight: 900; text-align: center; cursor: pointer; background: white; }
-        .tile-btn.selected { border-color: var(--blue); background: rgba(0,122,255,0.1); color: var(--blue); }
-        .layer-control-panel { border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px; width: 100%; }
-        .layer-row { display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; border-radius: 8px; padding: 8px; margin-bottom: 5px; border: 1px solid #eee; }
-        .layer-name { font-size: 10px; font-weight: 800; color: #333; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .toggle-switch { position: relative; width: 36px; height: 20px; background: #e5e5ea; border-radius: 20px; transition: 0.3s; cursor: pointer; }
-        .toggle-switch.on { background: var(--blue); }
-        .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        .toggle-switch.on::after { left: 18px; }
-        .signature { position: absolute; bottom: 85px; left: 15px; color: white; font-size: 10px; font-weight: 700; z-index: 1000; text-shadow: 1px 1px 2px #000; opacity: 0.8; }
-        .leaflet-control-scale { margin-bottom: 75px !important; margin-left: 15px !important; border: none !important; }
-        .leaflet-control-scale-line { background: rgba(255,255,255,0.8) !important; border: 2px solid var(--dark) !important; border-top: none !important; font-weight: 900 !important; color: var(--dark) !important; }
-        .leaflet-top.leaflet-right { top: 15px; right: 15px; }
-        .leaflet-control-layers { border-radius: 15px !important; border: 1px solid rgba(255,255,255,0.4) !important; box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important; }
+        #menu-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 998; backdrop-filter: blur(2px); }
+        .ui-card { background: var(--glass); backdrop-filter: blur(20px); border-radius: 16px; position: absolute; z-index: 1000; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.4); }
+
+        .signature {
+            position: absolute; bottom: 45px; left: 10px; z-index: 1001;
+            font-size: 10px; font-weight: 800; color: rgba(0, 0, 0, 0.35);
+            pointer-events: none; letter-spacing: 0.5px; text-transform: lowercase;
+        }
+
+        .bottom-nav { bottom: 25px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 450px; display: flex; justify-content: space-between; padding: 10px 20px; box-sizing: border-box; }
+        .nav-item { text-align: center; cursor: pointer; flex: 1; display: flex; flex-direction: column; align-items: center; opacity: 0.8; transition: 0.2s; -webkit-tap-highlight-color: transparent; }
+        .nav-item:active { opacity: 0.4; transform: scale(0.95); }
+        .nav-icon { font-size: 22px; margin-bottom: 2px; }
+        .nav-text { font-size: 10px; font-weight: 700; color: var(--dark); letter-spacing: 0.5px; }
+
+        .submenu { display: none; bottom: 100px; left: 50%; transform: translateX(-50%); width: 85%; max-width: 380px; padding: 15px; flex-direction: column; gap: 8px; }
+        .btn-sys { width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: 700; font-size: 11px; cursor: pointer; background: #fff; border: 1px solid #ddd; color: #333; transition: 0.2s; }
+        .btn-sys:active { background: #f0f0f0; }
+        .btn-primary { background: #000; color: #fff; border: none; }
+        .active-p { background: var(--blue) !important; color: white !important; border: none; }
+        
+        .grid-dom { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 5px; }
+        .btn-mini { padding: 8px 0; font-size: 10px; border-radius: 6px; border: 1px solid #eee; background: #fff; cursor: pointer; font-weight: bold; }
+
+        .layer-box { max-height: 180px; overflow-y: auto; margin-top: 8px; border-top: 1px solid #eee; padding-top: 5px; }
+        .layer-row { display: flex; justify-content: space-between; padding: 8px 10px; background: #f2f2f7; border-radius: 8px; margin-bottom: 4px; font-size: 11px; font-weight: 600; align-items: center; }
+
+        #vizor { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 5000; pointer-events: none; }
+        .v-frame { position: absolute; border: 2px solid var(--ruler); box-shadow: 0 0 0 4000px rgba(0,0,0,0.65); display: flex; justify-content: center; align-items: center; }
+        
+        .tick-h { position: absolute; background: var(--ruler); width: 1px; height: 8px; top: 0; }
+        .tick-h-bot { position: absolute; background: var(--ruler); width: 1px; height: 8px; bottom: 0; }
+        .tick-v { position: absolute; background: var(--ruler); height: 1px; width: 8px; left: 0; }
+        .tick-v-right { position: absolute; background: var(--ruler); height: 1px; width: 8px; right: 0; }
+
+        .ruler-label { position: absolute; background: #000; color: #FFD700; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 800; white-space: nowrap; border: 1px solid rgba(255,255,255,0.3); z-index: 5002; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        
+        .output-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 420px; pointer-events: auto; display: flex; gap: 8px; }
+        .btn-out { flex: 1; padding: 14px 0; font-size: 11px; font-weight: 800; border-radius: 12px; border: none; color: #fff; cursor: pointer; text-transform: uppercase; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; gap: 5px; }
+
+        #shutter { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
+        .leaflet-control-scale-line { border: 1px solid #333; border-top: none; line-height: 1.1; padding: 2px 5px; color: #000; font-weight: bold; font-size: 10px; background: rgba(255,255,255,0.8); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        
+        /* Yazı Performans Ayarı: Uzaktayken yazıları gizle */
+        .dxf-text-label div { 
+            pointer-events: none; 
+            text-shadow: 1px 1px 0px #000, -1px -1px 0px #000;
+        }
+        .hide-texts .dxf-text-label { display: none !important; }
     </style>
 </head>
 <body>
 
-<div id="progress-ui"><div class="pg-bg"><div id="pg-bar"></div><div id="pg-text">LÜTFEN BEKLEYİN... %0</div></div></div>
+<div id="shutter" data-html2canvas-ignore="true">
+    <div style="font-size: 40px; animation: pulse 1s infinite;">📸</div>
+    <div style="font-weight: 900; margin-top: 15px; font-size:14px;">GÖRÜNTÜ İŞLENİYOR</div>
+</div>
+
+<div id="menu-overlay" onclick="closeMenus()"></div>
 <div id="map"></div>
-<div class="signature">ersin.kucukcamur</div>
+<div class="signature" data-html2canvas-ignore="true">ersin.kucukcamur</div>
 
-<div id="report-frame">
-    <div style="position: absolute; bottom: -70px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; pointer-events: auto;">
-        <button class="btn-sys" style="background:var(--blue); color:white; padding:15px 45px;" id="btn-final-export">VERİYİ AKTAR</button>
-        <button class="btn-sys" style="background:var(--red); color:white; padding:15px 45px;" onclick="closeReportUI()">VAZGEÇ</button>
+<div id="m-proje" class="ui-card submenu">
+    <button class="btn-sys btn-primary" onclick="document.getElementById('f-in').click()">📂 DOSYA YÜKLE (DXF / KMZ / KML)</button>
+    <div style="margin-top:10px; font-size:10px; font-weight:bold; color:#666;">DATUM & DOM</div>
+    <div style="display:flex; gap:5px; margin-top:2px;">
+        <button id="p-itrf" class="btn-sys active-p" style="flex:1; padding:8px;" onclick="setDatum('ITRF')">ITRF (GRS80)</button>
+        <button id="p-ed50" class="btn-sys" style="flex:1; padding:8px;" onclick="setDatum('ED50')">ED50 (HAYFORD)</button>
+    </div>
+    <div class="grid-dom" id="dom-container"></div>
+    <div class="layer-box">
+        <div class="layer-row" style="background:#333; color:#fff;">
+            <span>TÜM KATMANLAR</span>
+            <input type="checkbox" checked onchange="toggleAllLayers(this.checked)" style="accent-color: var(--blue);">
+        </div>
+        <div id="lyr-list"></div>
     </div>
 </div>
 
-<div id="m-proje" class="glass submenu">
-    <div class="tile-grid" style="grid-template-columns: 1fr 1fr;"><div class="tile-btn selected" onclick="setProj('ITRF', this)">ITRF96</div><div class="tile-btn" onclick="setProj('ED50', this)">ED50</div></div>
-    <div class="tile-grid">
-        <div class="tile-btn" onclick="setDOM(27, this)">27°</div><div class="tile-btn selected" onclick="setDOM(30, this)">30°</div><div class="tile-btn" onclick="setDOM(33, this)">33°</div>
-        <div class="tile-btn" onclick="setDOM(36, this)">36°</div><div class="tile-btn" onclick="setDOM(39, this)">39°</div><div class="tile-btn" onclick="setDOM(42, this)">42°</div>
+<div class="ui-card bottom-nav" data-html2canvas-ignore="true">
+    <div class="nav-item" onclick="toggleMenu('m-proje')"><span class="nav-icon">📁</span><span class="nav-text">PROJE</span></div>
+    <div class="nav-item" onclick="handleLocationClick()"><span class="nav-icon" id="gps-ico">📍</span><span class="nav-text" id="gps-txt">KONUM</span></div>
+    <div class="nav-item" id="nav-btn-go" onclick="toggleNavigate()"><span class="nav-icon">↗️</span><span class="nav-text">ADRESE GİT</span></div>
+    <div class="nav-item" onclick="openVizor()"><span class="nav-icon">🖨️</span><span class="nav-text">ÇIKTI AL</span></div>
+</div>
+
+<div id="vizor">
+    <div id="v-frame" class="v-frame">
+        <div id="lbl-w" class="ruler-label" style="top: -30px; left: 50%; transform: translateX(-50%);">G: 0.00 m</div>
+        <div id="lbl-h" class="ruler-label" style="left: -90px; top: 50%; transform: translateY(-50%) rotate(-90deg);">Y: 0.00 m</div>
+        <div id="lbl-seg" class="ruler-label" style="bottom: -30px; left: 50%; transform: translateX(-50%); background:var(--blue); color:#fff; border-color:var(--blue);">Çizgi Aralığı: 0.00 m</div>
+        <div id="ticks-container"></div>
     </div>
-    <button class="btn-sys" onclick="trigger('f-project')" style="background:#000; color:white;">📂 PROJE DOSYASI YÜKLE</button>
-    <div id="layer-manager" class="layer-control-panel"></div>
-</div>
-
-<div id="m-foto" class="glass submenu">
-    <button class="btn-sys" onclick="trigger('f-multi')">📸 FOTOĞRAF ÇEK / SEÇ</button>
-    <button class="btn-sys" onclick="trigger('f-folder')">📂 KLASÖRDEN YÜKLE</button>
-    <button class="btn-sys" onclick="setMode('manual')">📍 MANUEL KONUM (GPS YOKSA)</button>
-</div>
-
-<div id="m-edit" class="glass submenu">
-    <div style="display:flex; gap:10px; justify-content:center; margin-bottom:5px;">
-        <div class="tile-btn selected" onclick="setCol('#FF3B30', this)" style="background:var(--red); width:35px; height:35px; border-radius:50%;"></div>
-        <div class="tile-btn" onclick="setCol('#007AFF', this)" style="background:var(--blue); width:35px; height:35px; border-radius:50%;"></div>
-        <div class="tile-btn" onclick="setCol('#FFCC00', this)" style="background:#FFCC00; width:35px; height:35px; border-radius:50%;"></div>
-    </div>
-    <button class="btn-sys" id="btn-ruler" onclick="setMode('ruler')">📏 MESAFE ÖLÇER</button>
-    <button class="btn-sys" id="btn-text" onclick="setMode('text')">💬 AÇIKLAMA EKLE</button>
-    <button class="btn-sys" id="btn-erase" onclick="setMode('erase')" style="color:var(--red)">🗑️ SİLGİ</button>
-    <button class="btn-sys" id="btn-move" onclick="setMode('move')">🤚 NESNE TAŞI</button>
-</div>
-
-<div id="m-report" class="glass submenu">
-    <input type="text" id="report-name" class="btn-sys" style="text-align:center; background:var(--gray);">
-    <button class="btn-sys" onclick="openReportUI('EXCEL')" style="background:#34C759; color:white;">📊 EXCEL RAPORU (.xlsx)</button>
-    <button class="btn-sys" onclick="openReportUI('KMZ')" style="background:#5856D6; color:white;">🗺️ KMZ (GOOGLE EARTH)</button>
-    <input type="file" id="f-template" accept=".xlsx" hidden>
-</div>
-
-<div class="glass bottom-nav">
-    <div class="nav-item" onclick="toggleMenu('m-proje', event)">📁<span class="nav-text">PROJE</span></div>
-    <div class="nav-item" onclick="toggleMenu('m-foto', event)">📸<span class="nav-text">FOTO</span></div>
-    <div class="nav-item" onclick="toggleMenu('m-edit', event)">✏️<span class="nav-text">DÜZENLE</span></div>
-    <div class="nav-item" onclick="setMode('navigate')" id="btn-navigate">🚗<span class="nav-text">ADRESE GİT</span></div>
-    <div class="nav-item" onclick="toggleGPS()">🎯<span class="nav-text" id="gps-text">KONUM</span></div>
-    <div class="nav-item" onclick="handleSaveToggle()">💾<span class="nav-text" id="save-txt">KAYDET</span></div>
-    <div class="nav-item" onclick="toggleMenu('m-report', event)">📊<span class="nav-text">RAPOR</span></div>
-</div>
-
-<input type="file" id="f-multi" multiple accept="image/*" hidden>
-<input type="file" id="f-folder" webkitdirectory directory multiple hidden>
-<input type="file" id="f-project" accept=".dxf,.kml,.kmz" hidden>
-
-<div id="preview-modal">
-    <img id="preview-img" style="width:100%; border-radius:20px; margin-bottom:15px; display: block; object-fit: contain; max-height: 60vh;">
-    <div style="display:flex; gap:10px;">
-        <button class="btn-sys" style="background:var(--blue); color:white; flex:2;" onclick="approvePhoto()">SEÇ/RAPORA EKLE</button>
-        <button class="btn-sys" style="flex:1;" onclick="cancelSelection()">İPTAL</button>
+    <div class="output-controls" data-html2canvas-ignore="true">
+        <button class="btn-out" style="background:var(--blue);" onclick="renderHighRes()"><span>📷</span> FOTOĞRAF</button>
+        <button class="btn-out" style="background:#34C759;" onclick="exportKMZVisible()"><span>🌍</span> KMZ KAYDET</button>
+        <button class="btn-out" style="background:#FF3B30;" onclick="closeVizor()"><span>✖</span> İPTAL</button>
     </div>
 </div>
+
+<input type="file" id="f-in" accept=".dxf,.kmz,.kml" hidden>
 
 <script>
-    const ACI_COLORS = {
-        1: "#FF0000", 2: "#FFFF00", 3: "#00FF00", 4: "#00FFFF", 5: "#0000FF", 6: "#FF00FF", 7: "#FFFFFF",
-        8: "#808080", 9: "#C0C0C0", 10: "#FF0000", 11: "#FF7F7F", 12: "#A50000", 13: "#A55252",
-        250: "#333333", 251: "#505050", 252: "#696969", 253: "#828282", 254: "#bebebe", 255: "#ffffff"
-    };
+    const CONFIG = { datum: 'ITRF', dom: 30 };
+    let map, layers = {}, gpsWatch = null, userMarker = null, isNavMode = false;
+    let globalBounds = null;
 
-    const STATE = {
-        map: null, mode: null, col: '#FF3B30', datum: 'ITRF', dom: 30,
-        layers: L.featureGroup(), projectLayers: {}, photos: [], reportCount: 0,
-        isWatching: false, userMarker: null, isSaved: false,
-        startLatLng: null, tempLine: null, movingObj: null, isPreviewOpen: false
-    };
-
-    function init() {
-        STATE.map = L.map('map', { zoomControl: false, zoomSnap: 0.1, renderer: L.canvas({ tolerance: 30 }), tap: false }).setView([39, 35], 6);
-        const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21, crossOrigin: 'anonymous' });
-        const googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21, crossOrigin: 'anonymous' });
-        googleHybrid.addTo(STATE.map);
-        const baseMaps = { "Hibrit Uydu": googleHybrid, "Sokak Haritası": googleStreets };
-        L.control.layers(baseMaps, null, { position: 'topright', collapsed: true }).addTo(STATE.map);
-        L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(STATE.map);
-        STATE.layers.addTo(STATE.map);
-        STATE.map.on('click', (e) => { if(STATE.isPreviewOpen) { closePreview(); return; } closeAllMenus(); onMapClick(e); });
-        STATE.map.on('mousemove', onMapMove);
-        STATE.map.on('locationfound', (e) => {
-            if(!STATE.userMarker) STATE.userMarker = L.marker(e.latlng, { icon: L.divIcon({ className: 'pulse-icon', iconSize: [18,18] }) }).addTo(STATE.map);
-            else STATE.userMarker.setLatLng(e.latlng);
-            if(STATE.isWatching) STATE.map.setView(e.latlng, 18);
-            document.getElementById('gps-text').innerText = "DURDUR";
-        });
-        document.getElementById('f-multi').onchange = e => handlePhotos(e.target.files);
-        document.getElementById('f-folder').onchange = e => handlePhotos(e.target.files);
-        document.getElementById('f-project').onchange = e => handleProjectFile(e.target.files[0]);
-        document.getElementById('f-template').onchange = e => { if(e.target.files[0]) runExcelReport(e.target.files[0]); };
-        document.getElementById('btn-final-export').onclick = () => STATE.reportType === 'KMZ' ? runKMZ() : trigger('f-template');
-        updateReportName();
+    const ACI = ["#000000", "#FF0000", "#FFFF00", "#00FF00", "#00FFFF", "#0000FF", "#FF00FF", "#FFFFFF", "#808080", "#C0C0C0"];
+    for(let i=10; i<=255; i++) {
+        const h = i / 255;
+        const r = Math.floor(255 * h);
+        const g = Math.floor(255 * (1 - h));
+        const b = Math.floor(128 + 127 * Math.sin(i));
+        ACI[i] = `rgb(${r},${g},${b})`;
     }
 
-    async function handleProjectFile(f) {
-        if(!f) return;
-        showProg("VERİLER AYRIŞTIRILIYOR", 20);
-        Object.values(STATE.projectLayers).forEach(l => STATE.map.removeLayer(l));
-        STATE.projectLayers = {};
-        document.getElementById('layer-manager').innerHTML = '';
-        const ext = f.name.split('.').pop().toLowerCase();
-        const r = new FileReader();
-        r.onload = async (e) => {
+    function getDXFColor(ent, dxf) {
+        if(ent.trueColor) return "#" + ("000000" + ent.trueColor.toString(16)).slice(-6);
+        if(ent.colorIndex && ent.colorIndex !== 256) return ACI[ent.colorIndex] || "#ffffff";
+        const layer = dxf.tables.layer.layers[ent.layer];
+        if(layer && layer.colorIndex) return ACI[layer.colorIndex] || "#ffffff";
+        return "#ffffff";
+    }
+
+    function getLineWeight(ent) {
+        if(!ent.lineweight || ent.lineweight < 0) return 2;
+        return Math.max(1, ent.lineweight / 25);
+    }
+
+    window.onload = () => {
+        const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 22 });
+        const googleLabels = L.tileLayer('https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}', { maxZoom: 22 });
+
+        map = L.map('map', { 
+            zoomControl: false, attributionControl: false, maxZoom: 23, 
+            layers: [googleSat, googleLabels], preferCanvas: true 
+        }).setView([39, 35], 6);
+
+        // Zoom'a göre yazı gizleme/gösterme mantığı
+        map.on('zoomend', () => {
+            if(map.getZoom() < 18) document.getElementById('map').classList.add('hide-texts');
+            else document.getElementById('map').classList.remove('hide-texts');
+        });
+
+        const domCon = document.getElementById('dom-container');
+        [27,30,33,36,39,42,45].forEach(d => {
+            domCon.innerHTML += `<button class="btn-mini ${d===30?'active-p':''}" onclick="setDOM(${d}, this)">${d}</button>`;
+        });
+
+        document.getElementById('f-in').onchange = e => handleUpload(e.target.files[0]);
+        map.on('move zoom', updateRulerInfo);
+        initTicks();
+    };
+
+    function transform(x, y) {
+        let p = CONFIG.datum === 'ITRF' 
+            ? `+proj=tmerc +lat_0=0 +lon_0=${CONFIG.dom} +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs` 
+            : `+proj=tmerc +lat_0=0 +lon_0=${CONFIG.dom} +k=1 +x_0=500000 +y_0=0 +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +units=m +no_defs`;
+        const res = proj4(p, 'EPSG:4326', [parseFloat(x), parseFloat(y)]);
+        const latlng = [res[1], res[0]];
+        if(globalBounds) globalBounds.extend(latlng);
+        return latlng;
+    }
+
+    function drawEntity(ent, dxf, layerGroup) {
+        const color = getDXFColor(ent, dxf);
+        const weight = getLineWeight(ent);
+
+        if(['LINE','LWPOLYLINE','POLYLINE'].includes(ent.type)) {
+            const pts = (ent.vertices || [ent.start, ent.end]).map(v => transform(v.x, v.y));
+            if(pts.length > 1) L.polyline(pts, { color: color, weight: weight }).addTo(layerGroup);
+        } else if(ent.type === 'CIRCLE' || ent.type === 'ARC') {
+            const center = transform(ent.center.x, ent.center.y);
+            L.circle(center, { radius: ent.radius, color: color, weight: weight, fill: false }).addTo(layerGroup);
+        } 
+        else if(['TEXT', 'MTEXT'].includes(ent.type)) {
+            // "MEVCUT" katmanındaki yazıları tamamen filtrele
+            if (ent.layer && ent.layer.toUpperCase().includes("MEVCUT")) return;
+
+            const pos = ent.startPoint || ent.position;
+            if(pos) {
+                const latlng = transform(pos.x, pos.y);
+                const textContent = ent.text ? ent.text.replace(/\\P/g, '<br>') : "";
+                
+                // Orijinal DXF boyutu (px cinsinden ölçeklenmiş hali)
+                const dSize = ent.textHeight || ent.height || 1.2;
+                const finalSize = Math.max(7, dSize * 1.5); // Minimum 7px olsun ki okunabilsin
+
+                const textIcon = L.divIcon({
+                    className: 'dxf-text-label',
+                    html: `<div style="color:${color}; font-size:${finalSize}px; white-space:nowrap; font-family:Arial; font-weight:bold; transform: rotate(${(ent.rotation || 0) * -1}deg);">${textContent}</div>`,
+                    iconAnchor: [0, 0]
+                });
+                L.marker(latlng, { icon: textIcon, interactive: false }).addTo(layerGroup);
+            }
+        }
+    }
+
+    function renderBlockInsert(insert, dxf, layerGroup) {
+        const block = dxf.blocks[insert.name];
+        if(!block) return;
+        block.entities.forEach(e => {
+            const clone = JSON.parse(JSON.stringify(e));
+            if(clone.vertices) clone.vertices.forEach(v => { v.x += insert.position.x; v.y += insert.position.y; });
+            if(clone.start) { clone.start.x += insert.position.x; clone.start.y += insert.position.y; }
+            if(clone.end) { clone.end.x += insert.position.x; clone.end.y += insert.position.y; }
+            if(clone.center) { clone.center.x += insert.position.x; clone.center.y += insert.position.y; }
+            if(clone.startPoint) { clone.startPoint.x += insert.position.x; clone.startPoint.y += insert.position.y; }
+            if(clone.position) { clone.position.x += insert.position.x; clone.position.y += insert.position.y; }
+            drawEntity(clone, dxf, layerGroup);
+        });
+    }
+
+    async function handleUpload(file) {
+        if(!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+        globalBounds = L.latLngBounds();
+        try {
             if(ext === 'dxf') {
-                const dxf = new DxfParser().parseSync(e.target.result);
-                const prj = STATE.datum === 'ITRF' ? `+proj=tmerc +lat_0=0 +lon_0=${STATE.dom} +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs` : `+proj=tmerc +lat_0=0 +lon_0=${STATE.dom} +k=1 +x_0=500000 +y_0=0 +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +units=m +no_defs`;
+                const text = await file.text();
+                const dxf = new DxfParser().parseSync(text);
                 dxf.entities.forEach(ent => {
-                    if(['LINE','LWPOLYLINE','POLYLINE','CIRCLE','ARC'].includes(ent.type)) {
-                        const layerCfg = (dxf.tables && dxf.tables.layer && dxf.tables.layer.layers) ? dxf.tables.layer.layers[ent.layer] : null;
-                        const rawColorIdx = ent.colorIndex !== undefined ? ent.colorIndex : (ent.color !== undefined ? ent.color : 256);
-                        const layerColorIdx = layerCfg ? (layerCfg.colorIndex !== undefined ? layerCfg.colorIndex : layerCfg.color) : 7;
-                        const finalIdx = (rawColorIdx === 256 || rawColorIdx === undefined) ? layerColorIdx : rawColorIdx;
-                        const finalColor = ACI_COLORS[finalIdx] || "#ffffff";
-                        if (ent.type === 'CIRCLE' || ent.type === 'ARC') {
-                            const center = proj4(prj, 'EPSG:4326', [ent.center.x, ent.center.y]);
-                            const circle = L.circle([center[1], center[0]], { radius: ent.radius, color: finalColor, weight: 1.5, fill: false });
-                            addToLayerGroup(ent.layer || "0", circle);
-                        } else {
-                            const rawPts = ent.vertices || [ent.start, ent.end];
-                            const pts = rawPts.map(v => {
-                                const res = proj4(prj, 'EPSG:4326', [v.x, v.y]);
-                                return [res[1], res[0]];
-                            });
-                            const line = L.polyline(pts, {color: finalColor, weight: 1.5});
-                            addToLayerGroup(ent.layer || "0", line);
+                    const lyrName = ent.layer || "0";
+                    if(!layers[lyrName]) { layers[lyrName] = L.featureGroup().addTo(map); addLayerUI(lyrName); }
+                    if(ent.type === "INSERT") renderBlockInsert(ent, dxf, layers[lyrName]);
+                    else drawEntity(ent, dxf, layers[lyrName]);
+                });
+                // Yüklendiğinde zoom düşükse yazıları gizli başlat
+                if(map.getZoom() < 18) document.getElementById('map').classList.add('hide-texts');
+            } else if(ext === 'kmz' || ext === 'kml') {
+                let kmlText = "";
+                if(ext === 'kmz') {
+                    const zip = await JSZip.loadAsync(file);
+                    const kmlFile = Object.keys(zip.files).find(n => n.match(/\.kml$/i));
+                    kmlText = await zip.file(kmlFile).async("string");
+                } else { kmlText = await file.text(); }
+                const geo = toGeoJSON.kml(new DOMParser().parseFromString(kmlText, "text/xml"));
+                L.geoJSON(geo, {
+                    onEachFeature: (f, l) => {
+                        const n = "KMZ_Veri";
+                        if(!layers[n]) { layers[n] = L.featureGroup().addTo(map); addLayerUI(n); }
+                        l.addTo(layers[n]);
+                        if(l.getBounds) globalBounds.extend(l.getBounds()); else if(l.getLatLng) globalBounds.extend(l.getLatLng());
+                    }
+                }).addTo(map);
+            }
+            if(globalBounds.isValid()) map.fitBounds(globalBounds, { padding: [50, 50] });
+            toggleMenu('m-proje');
+        } catch(e) { alert("Hata!"); }
+    }
+
+    function addLayerUI(name) {
+        const div = document.createElement('div'); div.className = 'layer-row';
+        div.innerHTML = `<span>${name}</span><input type="checkbox" checked class="lyr-chk" data-name="${name}" onchange="toggleLayer('${name}')" style="accent-color:var(--blue);">`;
+        document.getElementById('lyr-list').appendChild(div);
+    }
+    function toggleLayer(n) { const l = layers[n]; map.hasLayer(l) ? map.removeLayer(l) : map.addLayer(l); }
+    function toggleAllLayers(stat) {
+        document.querySelectorAll('.lyr-chk').forEach(cb => {
+            cb.checked = stat; const n = cb.getAttribute('data-name');
+            stat ? (!map.hasLayer(layers[n]) && map.addLayer(layers[n])) : (map.hasLayer(layers[n]) && map.removeLayer(layers[n]));
+        });
+    }
+    function handleLocationClick() {
+        if(userMarker) { map.flyTo(userMarker.getLatLng(), 19); } else {
+            document.getElementById('gps-txt').innerText = "ARANIYOR";
+            navigator.geolocation.watchPosition(p => {
+                const lat = p.coords.latitude, lng = p.coords.longitude;
+                if(!userMarker) { userMarker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', fillColor: '#007AFF', fillOpacity: 1, weight: 3 }).addTo(map); map.flyTo([lat, lng], 19); }
+                else { userMarker.setLatLng([lat, lng]); }
+                document.getElementById('gps-txt').innerText = "TAKİPTE";
+            }, () => alert("Konum hatası."), { enableHighAccuracy: true });
+        }
+    }
+    function initTicks() {
+        const c = document.getElementById('ticks-container'); c.innerHTML = '';
+        for(let i=1; i<20; i++) c.innerHTML += `<div class="tick-h" style="left:${i*5}%"></div><div class="tick-h-bot" style="left:${i*5}%"></div>`;
+        for(let i=1; i<10; i++) c.innerHTML += `<div class="tick-v" style="top:${i*10}%"></div><div class="tick-v-right" style="top:${i*10}%"></div>`;
+    }
+    function updateRulerInfo() {
+        if(document.getElementById('vizor').style.display === 'none') return;
+        const f = document.getElementById('v-frame').getBoundingClientRect();
+        const nw = map.containerPointToLatLng([f.left, f.top]), ne = map.containerPointToLatLng([f.right, f.top]), sw = map.containerPointToLatLng([f.left, f.bottom]);
+        const w = map.distance(nw, ne), h = map.distance(nw, sw);
+        document.getElementById('lbl-w').innerText = `G: ${w.toFixed(2)} m`;
+        document.getElementById('lbl-h').innerText = `Y: ${h.toFixed(2)} m`;
+        document.getElementById('lbl-seg').innerText = `Çizgi Aralığı: ${(w/20).toFixed(2)} m`;
+    }
+    async function renderHighRes() {
+        const f = document.getElementById('v-frame'), r = f.getBoundingClientRect();
+        const nw = map.containerPointToLatLng([r.left, r.top]), ne = map.containerPointToLatLng([r.right, r.top]);
+        const scaleFactor = (map.distance(nw, ne) * 10) / r.width;
+        document.getElementById('shutter').style.display = 'flex';
+        await new Promise(res => setTimeout(res, 600));
+        const canvas = await html2canvas(document.body, { scale: scaleFactor, useCORS: true, ignoreElements: el => el.getAttribute('data-html2canvas-ignore') === 'true' });
+        const out = document.createElement('canvas'); out.width = r.width * scaleFactor; out.height = r.height * scaleFactor;
+        out.getContext('2d').drawImage(canvas, r.left*scaleFactor, r.top*scaleFactor, r.width*scaleFactor, r.height*scaleFactor, 0, 0, out.width, out.height);
+        saveAs(out.toDataURL("image/jpeg", 0.92), `Saha_Foto.jpg`);
+        document.getElementById('shutter').style.display = 'none';
+    }
+    function exportKMZVisible() {
+        const f = document.getElementById('v-frame').getBoundingClientRect();
+        const b = L.latLngBounds(map.containerPointToLatLng([f.left, f.top]), map.containerPointToLatLng([f.right, f.bottom]));
+        let kml = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Export</name>`;
+        Object.keys(layers).forEach(ln => {
+            if(map.hasLayer(layers[ln])) {
+                layers[ln].eachLayer(l => {
+                    if(l instanceof L.Polyline) {
+                        const pts = l.getLatLngs();
+                        if(pts.some(p => b.contains(p))) {
+                            let hex = (l.options.color || "#ffffff").replace('#','');
+                            if(hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+                            const kmlColor = `ff${hex.substring(4,6)}${hex.substring(2,4)}${hex.substring(0,2)}`; 
+                            kml += `<Placemark><Style><LineStyle><color>${kmlColor}</color><width>2</width></LineStyle></Style><LineString><coordinates>`;
+                            pts.forEach(p => kml += `${p.lng},${p.lat},0 `);
+                            kml += `</coordinates></LineString></Placemark>`;
                         }
                     }
                 });
-            } else {
-                let k = ext==='kmz' ? await (await JSZip.loadAsync(e.target.result)).file(/.*\.kml$/i)[0].async("string") : e.target.result;
-                const geojson = toGeoJSON.kml(new DOMParser().parseFromString(k, "text/xml"));
-                L.geoJSON(geojson, {
-                    style: f => ({ color: f.properties.stroke || f.properties.color || "#FF3B30", weight: 2 }),
-                    onEachFeature: (f, l) => addToLayerGroup(f.properties.layer || f.properties.name || "KMZ", l)
-                });
-            }
-            renderLayerUI();
-            const allBounds = L.featureGroup(Object.values(STATE.projectLayers)).getBounds();
-            if(allBounds.isValid()) STATE.map.fitBounds(allBounds);
-            showProg("TAMAM", 100);
-        };
-        (ext==='kmz') ? r.readAsArrayBuffer(f) : r.readAsText(f);
-    }
-
-    function addToLayerGroup(name, layer) {
-        if(!STATE.projectLayers[name]) STATE.projectLayers[name] = L.featureGroup().addTo(STATE.map);
-        layer.addTo(STATE.projectLayers[name]);
-        attachInteractions(layer);
-    }
-
-    function renderLayerUI() {
-        const container = document.getElementById('layer-manager');
-        container.innerHTML = `<h3 style="font-size:12px; margin:10px 0;">KATMANLAR</h3>`;
-        const allBtn = document.createElement('div');
-        allBtn.className = 'layer-row'; allBtn.style.background = '#333'; allBtn.style.color = '#fff';
-        allBtn.innerHTML = `<span class="layer-name">TÜMÜNÜ AÇ/KAPAT</span><div class="toggle-switch on" onclick="toggleAllLayers(this)"></div>`;
-        container.appendChild(allBtn);
-        Object.keys(STATE.projectLayers).forEach(key => {
-            const row = document.createElement('div'); row.className = 'layer-row';
-            row.innerHTML = `<span class="layer-name">${key}</span><div class="toggle-switch on" onclick="toggleLayer('${key}', this)"></div>`;
-            container.appendChild(row);
-        });
-    }
-
-    function toggleLayer(name, el) {
-        const grp = STATE.projectLayers[name];
-        if(STATE.map.hasLayer(grp)) { STATE.map.removeLayer(grp); el.classList.remove('on'); }
-        else { STATE.map.addLayer(grp); el.classList.add('on'); }
-    }
-
-    function toggleAllLayers(el) {
-        const isOn = el.classList.contains('on');
-        Object.keys(STATE.projectLayers).forEach(k => {
-            if(isOn) STATE.map.removeLayer(STATE.projectLayers[k]);
-            else if(!STATE.map.hasLayer(STATE.projectLayers[k])) STATE.map.addLayer(STATE.projectLayers[k]);
-        });
-        el.classList.toggle('on');
-        document.querySelectorAll('#layer-manager .toggle-switch').forEach(s => isOn ? s.classList.remove('on') : s.classList.add('on'));
-    }
-
-    async function handlePhotos(files) {
-        if(!files || files.length === 0) return;
-        const fileArray = Array.from(files);
-        for(let i=0; i < fileArray.length; i++) {
-            showProg("İŞLENİYOR " + (i+1) + "/" + fileArray.length, ((i+1)/fileArray.length)*100);
-            let f = fileArray[i], b = f; 
-            try {
-                if(f.name.toLowerCase().endsWith('.heic')) b = await heic2any({blob: f, toType: "image/jpeg", quality: 0.8});
-                let gps = null;
-                try { gps = await exifr.gps(b); } catch {}
-                if (!gps) {
-                    const exif = await exifr.parse(b, { gps: true });
-                    if (exif?.latitude && exif?.longitude) gps = { latitude: exif.latitude, longitude: exif.longitude };
-                }
-                if (STATE.manualPos) gps = { latitude: STATE.manualPos.lat, longitude: STATE.manualPos.lng };
-                if (gps && gps.latitude && gps.longitude) {
-                    const xlData = await processImg(b, 1200, 0.75), kmzData = await processImg(b, 600, 0.5);  
-                    const m = L.marker([gps.latitude, gps.longitude], { icon: L.divIcon({className: 'photo-marker', iconSize:[24,24]}) }).addTo(STATE.layers);
-                    STATE.photos.push({ lat: gps.latitude, lng: gps.longitude, xlSrc: xlData, kmzSrc: kmzData, marker: m, approved: false, reportOrder: 0 });
-                    attachInteractions(m);
-                }
-            } catch (err) { console.error(err); }
-        }
-        if(STATE.layers.getBounds().isValid()) STATE.map.fitBounds(STATE.layers.getBounds(), {padding:[50,50]});
-        STATE.manualPos = null;
-    }
-
-    async function processImg(file, maxSide, qual) {
-        return new Promise(res => {
-            const r = new FileReader();
-            r.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let w = img.width, h = img.height;
-                    canvas.width = (w > h) ? h : w; canvas.height = (w > h) ? w : h;
-                    const ctx = canvas.getContext('2d');
-                    if(w > h) { ctx.translate(canvas.width/2, canvas.height/2); ctx.rotate(90 * Math.PI / 180); ctx.drawImage(img, -w/2, -h/2); }
-                    else ctx.drawImage(img, 0, 0);
-                    const finalCanvas = document.createElement('canvas');
-                    const ratio = Math.min(maxSide/canvas.height, maxSide/canvas.width);
-                    finalCanvas.width = canvas.width * ratio; finalCanvas.height = canvas.height * ratio;
-                    finalCanvas.getContext('2d').drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
-                    res(finalCanvas.toDataURL('image/jpeg', qual));
-                };
-                img.src = e.target.result;
-            };
-            r.readAsDataURL(file);
-        });
-    }
-
-    function onMapClick(e) {
-        if(STATE.movingObj) { 
-            if(STATE.movingObj.setLatLng) STATE.movingObj.setLatLng(e.latlng);
-            const photo = STATE.photos.find(p => p.marker === STATE.movingObj);
-            if(photo) { photo.lat = e.latlng.lat; photo.lng = e.latlng.lng; }
-            STATE.movingObj = null; STATE.map.dragging.enable(); return; 
-        }
-        if(STATE.mode === 'manual') { STATE.manualPos = e.latlng; trigger('f-multi'); setMode(null); } 
-        else if(STATE.mode === 'ruler') handleRuler(e.latlng); 
-        else if(STATE.mode === 'text') handleText(e.latlng);
-        else if(STATE.mode === 'navigate') handleNavigation(e.latlng);
-    }
-
-    function onMapMove(e) {
-        if(STATE.mode === 'ruler' && STATE.startLatLng) STATE.tempLine.setLatLngs([STATE.startLatLng, e.latlng]);
-        else if(STATE.mode === 'move' && STATE.movingObj) { if(STATE.movingObj.setLatLng) STATE.movingObj.setLatLng(e.latlng); }
-    }
-
-    function handleNavigation(ll) {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const url = isMobile ? `google.navigation:q=${ll.lat},${ll.lng}` : `https://www.google.com/maps?q=${ll.lat},${ll.lng}`;
-        window.open(url, '_blank');
-        setMode(null);
-    }
-
-    async function runExcelReport(tpl) {
-        showProg("KAPAK OLUŞTURULUYOR", 10);
-        const wb = new ExcelJS.Workbook(); await wb.xlsx.load(tpl);
-        
-        // --- DİNAMİK 4x3 CAPTURE ---
-        const frame = document.getElementById('report-frame').getBoundingClientRect();
-        const canvas = await html2canvas(document.getElementById('map'), { useCORS:true, x:frame.left, y:frame.top, width:frame.width, height:frame.height, scale:2 });
-        
-        const wsKapak = wb.getWorksheet('KAPAK');
-        if(wsKapak) wsKapak.addImage(wb.addImage({ base64: canvas.toDataURL('image/jpeg', 0.9), extension: 'jpeg' }), { tl: { col: 1, row: 30 }, ext: { width: 750, height: 560 } });
-        const bounds = getReportBounds();
-        const approved = STATE.photos.filter(p => p.approved && STATE.layers.hasLayer(p.marker) && bounds.contains([p.lat, p.lng])).sort((a,b) => a.reportOrder - b.reportOrder);
-        const sfCount = Math.ceil(approved.length / 4);
-        const blankModel = JSON.parse(JSON.stringify(wb.getWorksheet('sf1').model));
-        for(let i = 2; i <= sfCount; i++) { let ws = wb.addWorksheet(`sf${i}`); ws.model = blankModel; ws.name = `sf${i}`; }
-        for(let i = 1; i <= sfCount; i++) {
-            const ws = wb.getWorksheet(`sf${i}`);
-            for(let j = 0; j < 4; j++) {
-                const pIdx = (i-1)*4 + j; if(!approved[pIdx]) break; const p = approved[pIdx];
-                const cellMap = [{no:'D2',link:'E2',lat:'G2',lng:'I2',col:2.02,row:2},{no:'K2',link:'L2',lat:'N2',lng:'P2',col:9.02,row:2},{no:'D32',link:'E32',lat:'G32',lng:'I32',col:2.02,row:32},{no:'K32',link:'L32',lat:'N32',lng:'P32',col:9.02,row:32}][j];
-                ws.getCell(cellMap.no).value = pIdx + 1; ws.getCell(cellMap.lat).value = p.lat.toFixed(6); ws.getCell(cellMap.lng).value = p.lng.toFixed(6);
-                ws.getCell(cellMap.link).value = { text: 'Konum', hyperlink: `https://www.google.com/maps?q=${p.lat},${p.lng}` };
-                ws.addImage(wb.addImage({base64: p.xlSrc, extension: 'jpeg'}), { tl: { col: cellMap.col, row: cellMap.row }, ext: { width: 378, height: 567 }, editAs: 'absolute' });
-            }
-        }
-        saveAs(new Blob([await wb.xlsx.writeBuffer()]), document.getElementById('report-name').value + ".xlsx");
-        closeReportUI(); showProg("TAMAM", 100);
-    }
-
-    async function runKMZ() {
-        showProg("KMZ ÜRETİLİYOR", 10);
-        const zip = new JSZip(), bounds = getReportBounds();
-        let kml = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>`;
-        const approved = STATE.photos.filter(p => p.approved && STATE.layers.hasLayer(p.marker) && bounds.contains([p.lat, p.lng])).sort((a,b) => a.reportOrder - b.reportOrder);
-        approved.forEach((p, i) => { zip.file(`files/p${i}.jpg`, p.kmzSrc.split(',')[1], {base64: true}); kml += `<Placemark><name>${i+1}</name><description><![CDATA[<img src="files/p${i}.jpg" width="300">]]></description><Point><coordinates>${p.lng},${p.lat}</coordinates></Point></Placemark>`; });
-        STATE.layers.eachLayer(l => {
-            if(l instanceof L.Polyline && !(l instanceof L.Polygon) && !(l instanceof L.Marker)) {
-                const c = l.getLatLngs().map(x => `${x.lng},${x.lat},0`).join(' '), hex = (l.options.color || '#FF3B30').replace('#', '');
-                kml += `<Placemark><Style><LineStyle><color>ff${hex.substring(4,6)}${hex.substring(2,4)}${hex.substring(0,2)}</color><width>4</width></LineStyle></Style><LineString><coordinates>${c}</coordinates></LineString></Placemark>`;
             }
         });
-        kml += `</Document></kml>`; zip.file("doc.kml", kml);
-        saveAs(await zip.generateAsync({type:"blob"}), document.getElementById('report-name').value + ".kmz");
-        closeReportUI(); showProg("TAMAM", 100);
+        kml += `</Document></kml>`;
+        const z = new JSZip(); z.file("doc.kml", kml); z.generateAsync({type:"blob"}).then(blob => saveAs(blob, "Saha.kmz"));
     }
-
-    function approvePhoto() { if(STATE.activePhoto) { if(!STATE.activePhoto.approved) { STATE.reportCount++; STATE.activePhoto.approved = true; STATE.activePhoto.reportOrder = STATE.reportCount; STATE.activePhoto.marker.setIcon(L.divIcon({className:'photo-marker approved', html:STATE.reportCount, iconSize:[34,34]})); } closePreview(); } }
-    function cancelSelection() { if(STATE.activePhoto?.approved) { STATE.activePhoto.approved = false; STATE.activePhoto.marker.setIcon(L.divIcon({className:'photo-marker', iconSize:[24,24]})); reorderPhotos(); } closePreview(); }
-    function reorderPhotos() { const approved = STATE.photos.filter(p => p.approved).sort((a,b) => a.reportOrder - b.reportOrder); STATE.reportCount = approved.length; approved.forEach((p, i) => { p.reportOrder = i + 1; p.marker.setIcon(L.divIcon({className:'photo-marker approved', html: p.reportOrder, iconSize:[34,34]})); }); }
-    function attachInteractions(layer) { layer.on('mousedown touchstart', (e) => { L.DomEvent.stopPropagation(e); if(STATE.mode === 'erase') { STATE.layers.removeLayer(layer); Object.values(STATE.projectLayers).forEach(grp => grp.removeLayer(layer)); reorderPhotos(); } else if(STATE.mode === 'move') { STATE.movingObj = layer; STATE.map.dragging.disable(); } else if(layer instanceof L.Marker && layer.options.icon.options.className.includes('photo-marker')) { openPreview(STATE.photos.find(p => p.marker === layer)); } }); }
-    function handleText(ll) { const v = prompt("Not:"); if(v) { const m = L.marker(ll, { icon: L.divIcon({ className: 'custom-label', html: v.replace(/\\n/g, '<br>'), iconSize: null }) }).addTo(STATE.layers); attachInteractions(m); } setMode(null); }
-    function toggleGPS() { if(STATE.isWatching) { STATE.map.stopLocate(); STATE.isWatching = false; document.getElementById('gps-text').innerText = "KONUM"; } else { document.getElementById('gps-text').innerText = "ARANIYOR"; STATE.map.locate({ watch: true, setView: true, maxZoom: 18, enableHighAccuracy: true }); STATE.isWatching = true; } }
-    function openPreview(p) { STATE.activePhoto = p; document.getElementById('preview-img').src = p.xlSrc; document.getElementById('preview-modal').style.display='block'; setTimeout(() => { STATE.isPreviewOpen = true; }, 100); }
-    function closePreview() { document.getElementById('preview-modal').style.display='none'; STATE.isPreviewOpen = false; }
-    function handleRuler(ll) { if(!STATE.startLatLng) { STATE.startLatLng = ll; STATE.tempLine = L.polyline([ll, ll], {color: STATE.col, weight: 3, dashArray: '5,8'}).addTo(STATE.map); } else { const d = STATE.startLatLng.distanceTo(ll), txt = d > 1000 ? (d/1000).toFixed(2)+'km' : Math.round(d)+'m'; const line = L.polyline([STATE.startLatLng, ll], {color: STATE.col, weight: 4}).addTo(STATE.layers).bindTooltip(txt, {permanent: true, direction: 'center', className: 'custom-label'}); attachInteractions(line); STATE.map.removeLayer(STATE.tempLine); STATE.startLatLng = null; setMode(null); } }
-    function toggleMenu(id, e) { if(e) e.stopPropagation(); const el = document.getElementById(id), op = el.style.display==='flex'; closeAllMenus(); if(!op) el.style.display='flex'; }
-    function closeAllMenus() { document.querySelectorAll('.submenu').forEach(s => s.style.display='none'); }
-    function openReportUI(t) { STATE.reportType = t; closeAllMenus(); document.getElementById('report-frame').style.display='block'; }
-    function closeReportUI() { document.getElementById('report-frame').style.display='none'; }
-    function showProg(msg, p) { document.getElementById('progress-ui').style.display='block'; document.getElementById('pg-bar').style.width=p+'%'; document.getElementById('pg-text').innerText=`${msg} %${Math.round(p)}`; if(p>=100) setTimeout(()=>document.getElementById('progress-ui').style.display='none', 800); }
-    function setMode(m) { 
-        STATE.mode = (STATE.mode === m) ? null : m; 
-        document.querySelectorAll('.btn-sys').forEach(b => b.classList.remove('active')); 
-        document.querySelectorAll('.nav-item').forEach(n => n.style.color = 'var(--dark)');
-        if(STATE.mode) {
-            document.getElementById('btn-' + STATE.mode)?.classList.add('active');
-            if(STATE.mode === 'navigate') document.getElementById('btn-navigate').style.color = 'var(--blue)';
-        }
-    }
-    function setProj(v, el) { STATE.datum = v; updateTiles(el); }
-    function setDOM(v, el) { STATE.dom = v; updateTiles(el); }
-    function updateTiles(el) { el.parentElement.querySelectorAll('.tile-btn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
-    function trigger(id) { document.getElementById(id).click(); }
-    function setCol(c, el) { STATE.col = c; document.querySelectorAll('.tile-btn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
-    function updateReportName() { const d = new Date(); document.getElementById('report-name').value = `Rapor_${d.getDate()}.${d.getMonth()+1}_${d.getHours()}${d.getMinutes()}`; }
-    function getReportBounds() { 
-        const frame = document.getElementById('report-frame').getBoundingClientRect();
-        const c = STATE.map.getSize().divideBy(2); 
-        return L.latLngBounds(
-            STATE.map.containerPointToLatLng([c.x-(frame.width/2), c.y-(frame.height/2)]), 
-            STATE.map.containerPointToLatLng([c.x+(frame.width/2), c.y+(frame.height/2)])
-        ); 
-    }
-    function handleSaveToggle() { STATE.isSaved = !STATE.isSaved; document.getElementById('save-txt').innerText = STATE.isSaved ? "DÜZENLE" : "KAYDET"; STATE.layers.eachLayer(l => { if(l instanceof L.Marker && STATE.photos.find(p=>p.marker===l && !p.approved)) l.getElement().style.opacity = STATE.isSaved ? "0" : "1"; }); }
-    window.onload = init;
+    function toggleMenu(id) { const m = document.getElementById(id); const isOpen = m.style.display==='flex'; closeMenus(); if(!isOpen){m.style.display='flex'; document.getElementById('menu-overlay').style.display='block';} }
+    function closeMenus() { document.querySelectorAll('.submenu').forEach(s => s.style.display='none'); document.getElementById('menu-overlay').style.display='none'; }
+    function setDatum(d) { CONFIG.datum = d; document.getElementById('p-itrf').classList.toggle('active-p', d==='ITRF'); document.getElementById('p-ed50').classList.toggle('active-p', d==='ED50'); }
+    function setDOM(d, el) { CONFIG.dom = d; document.querySelectorAll('.btn-mini').forEach(b => b.classList.remove('active-p')); el.classList.add('active-p'); }
+    function openVizor() { closeMenus(); document.getElementById('vizor').style.display='block'; const f = document.getElementById('v-frame'); const w = window.innerWidth * 0.60; const h = w * 0.75; f.style.width=w+'px'; f.style.height=h+'px'; f.style.left=(window.innerWidth-w)/2+'px'; f.style.top=(window.innerHeight-h)/2.5+'px'; updateRulerInfo(); }
+    function closeVizor() { document.getElementById('vizor').style.display='none'; }
+    function toggleNavigate() { isNavMode = !isNavMode; const btn = document.getElementById('nav-btn-go'); btn.style.opacity = isNavMode ? '1' : '0.8'; btn.querySelector('.nav-text').style.color = isNavMode ? '#007AFF' : '#1C1C1E'; }
 </script>
 </body>
 </html>
